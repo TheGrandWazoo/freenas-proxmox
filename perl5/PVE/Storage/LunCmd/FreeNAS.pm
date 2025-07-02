@@ -344,7 +344,7 @@ sub freenas_api_connect {
     }
     $freenas_server_list->{$apihost}->setHost($scheme . '://' . $apihost);
     $freenas_server_list->{$apihost}->addHeader('Content-Type', 'application/json');
-    if (defined($scfg->{'truenas_token_auth'})) {
+    if (defined($scfg->{'truenas_token_auth'}) && $scfg->{'truenas_token_auth'}) {
         syslog("info", (caller(0))[3] . " : Authentication using Bearer Token Auth");
         $freenas_server_list->{$apihost}->addHeader('Authorization', 'Bearer ' . $scfg->{truenas_secret});
     } else {
