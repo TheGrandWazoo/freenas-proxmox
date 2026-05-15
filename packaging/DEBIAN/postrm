@@ -10,7 +10,6 @@ ZFSPLUGIN_PATH="/perl5/PVE/Storage/ZFSPlugin.pm"
 PVEMANAGER_PATH="/pve-manager/js/pvemanagerlib.js"
 APIDOC_PATH="/pve-docs/api-viewer/apidoc.js"
 FREENAS_PM_PATH="/perl5/PVE/Storage/LunCmd/FreeNAS.pm"
-REST_CLIENT_PATH="/perl5/REST/Client.pm"
 INSTALL_DIR="/usr/share/freenas-proxmox"
 
 log() {
