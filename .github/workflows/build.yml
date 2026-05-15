@@ -1,0 +1,318 @@
+name: CI / Build / Publish
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: [master]
+
+env:
+  PACKAGE_NAME: freenas-proxmox
+
+# Cancel in-flight runs for the same branch on new push
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ── Job 1: Lint ──────────────────────────────────────────────────────────────
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install lint tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y shellcheck libperl-critic-perl
+
+      - name: Perl syntax check (all modules)
+        run: |
+          echo "==> Checking Perl syntax..."
+          find perl5 stable-*/perl5 -name "*.pm" -print0 \
+            | xargs -0 -I{} perl -c {} \
+            && echo "All .pm files OK"
+
+      - name: Perl static analysis (perlcritic)
+        run: |
+          echo "==> Running perlcritic..."
+          perlcritic --profile .perlcriticrc \
+            perl5/PVE/Storage/LunCmd/FreeNAS.pm \
+            perl5/PVE/Storage/Custom/FreeNAS.pm
+
+      - name: Shell script lint (shellcheck)
+        run: |
+          echo "==> Running shellcheck..."
+          shellcheck --severity=warning \
+            packaging/DEBIAN/postinst \
+            packaging/DEBIAN/postrm
+          echo "Shell scripts OK"
+
+  # ── Job 2: Validate patches apply cleanly ──────────────────────────────────
+  validate-patches:
+    name: Validate Patches
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dry-run patch: ZFSPlugin (PVE 8)
+        run: |
+          patch --dry-run --ignore-whitespace \
+            stable-8/perl5/PVE/Storage/ZFSPlugin.pm.orig \
+            < stable-8/perl5/PVE/Storage/ZFSPlugin.pm.patch \
+            && echo "ZFSPlugin PVE-8 patch: OK"
+
+      - name: Dry-run patch: apidoc.js (PVE 8)
+        run: |
+          patch --dry-run --ignore-whitespace \
+            stable-8/pve-docs/api-viewer/apidoc.js.orig \
+            < stable-8/pve-docs/api-viewer/apidoc.js.patch \
+            && echo "apidoc PVE-8 patch: OK"
+
+  # ── Job 3: Build .deb ────────────────────────────────────────────────────────
+  build:
+    name: Build Package
+    runs-on: ubuntu-latest
+    needs: [lint, validate-patches]
+
+    outputs:
+      version:         ${{ steps.vars.outputs.version }}
+      deb_file:        ${{ steps.vars.outputs.deb_file }}
+      channel:         ${{ steps.vars.outputs.channel }}
+      cloudsmith_repo: ${{ steps.vars.outputs.cloudsmith_repo }}
+      is_release:      ${{ steps.vars.outputs.is_release }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Fetch full history so tag-based versioning works
+          fetch-depth: 0
+
+      # ── Version resolution ─────────────────────────────────────────────────
+      # Version strategy:
+      #   Tagged release (v1.2.3)  →  1.2.3              (stable channel)
+      #   master branch            →  <tag>-beta+<sha>   (testing channel)
+      #   feature_* branch         →  <tag>-alpha+<sha>  (development channel)
+      #   any other branch / PR    →  <tag>-dev+<sha>    (no publish)
+      #
+      # The base version is derived from the most recent git tag (vX.Y.Z).
+      # No VERSION file needed — the tag IS the version.
+      - name: Resolve version and channel
+        id: vars
+        run: |
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          REF="${{ github.ref }}"
+          IS_RELEASE="false"
+
+          # Base version from the nearest vX.Y.Z tag (strips the 'v' prefix)
+          BASE_VERSION="$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null | sed 's/^v//' || echo '0.0.0')"
+
+          if [[ "$REF" == refs/tags/v* ]]; then
+            VERSION="${REF#refs/tags/v}"
+            CHANNEL="stable"
+            CLOUDSMITH_REPO="truenas-proxmox"
+            IS_RELEASE="true"
+
+          elif [[ "$REF" == refs/heads/master ]]; then
+            VERSION="${BASE_VERSION}-beta+${SHORT_SHA}"
+            CHANNEL="testing"
+            CLOUDSMITH_REPO="truenas-proxmox-testing"
+
+          elif [[ "$REF" == refs/heads/feature_* ]]; then
+            VERSION="${BASE_VERSION}-alpha+${SHORT_SHA}"
+            CHANNEL="development"
+            CLOUDSMITH_REPO="truenas-proxmox-snapshots"
+
+          else
+            VERSION="${BASE_VERSION}-dev+${SHORT_SHA}"
+            CHANNEL="none"
+            CLOUDSMITH_REPO=""
+          fi
+
+          DEB_FILE="${PACKAGE_NAME}_${VERSION}_all.deb"
+
+          echo "version=${VERSION}"                   >> "$GITHUB_OUTPUT"
+          echo "deb_file=${DEB_FILE}"                 >> "$GITHUB_OUTPUT"
+          echo "channel=${CHANNEL}"                   >> "$GITHUB_OUTPUT"
+          echo "cloudsmith_repo=${CLOUDSMITH_REPO}"   >> "$GITHUB_OUTPUT"
+          echo "is_release=${IS_RELEASE}"             >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Build Summary"
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Version | \`${VERSION}\` |"
+            echo "| Channel | \`${CHANNEL}\` |"
+            echo "| Package | \`${DEB_FILE}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ── Assemble staging directory ─────────────────────────────────────────
+      - name: Assemble package staging directory
+        run: |
+          VERSION="${{ steps.vars.outputs.version }}"
+          STAGING="dist"
+
+          mkdir -p "${STAGING}/DEBIAN"
+          mkdir -p "${STAGING}/usr/share/freenas-proxmox/patches/ZFSPlugin"
+          mkdir -p "${STAGING}/usr/share/freenas-proxmox/patches/pvemanagerlib"
+          mkdir -p "${STAGING}/usr/share/freenas-proxmox/patches/apidoc"
+
+          # Generate control file from template
+          sed "s/\${VERSION}/${VERSION}/" packaging/DEBIAN/control.j2 \
+            > "${STAGING}/DEBIAN/control"
+
+          # Maintainer scripts
+          cp packaging/DEBIAN/postinst "${STAGING}/DEBIAN/postinst"
+          cp packaging/DEBIAN/postrm   "${STAGING}/DEBIAN/postrm"
+          cp packaging/DEBIAN/triggers "${STAGING}/DEBIAN/triggers"
+          chmod 0755 "${STAGING}/DEBIAN/postinst" "${STAGING}/DEBIAN/postrm"
+
+          # Plugin source files
+          cp perl5/PVE/Storage/LunCmd/FreeNAS.pm  "${STAGING}/usr/share/freenas-proxmox/FreeNAS.pm"
+          cp perl5/REST/Client.pm                  "${STAGING}/usr/share/freenas-proxmox/REST-Client.pm"
+
+          # PVE 8 patches (primary supported version)
+          cp stable-8/perl5/PVE/Storage/ZFSPlugin.pm.patch \
+             "${STAGING}/usr/share/freenas-proxmox/patches/ZFSPlugin/8.patch"
+          cp stable-8/pve-manager/js/pvemanagerlib.js.patch \
+             "${STAGING}/usr/share/freenas-proxmox/patches/pvemanagerlib/8.patch"
+          cp stable-8/pve-docs/api-viewer/apidoc.js.patch \
+             "${STAGING}/usr/share/freenas-proxmox/patches/apidoc/8.patch"
+
+          # PVE 7 patches (best-effort — use latest versioned patch available)
+          for type in ZFSPlugin pvemanagerlib apidoc; do
+            case "$type" in
+              ZFSPlugin)    glob="stable-7/perl5/PVE/Storage/ZFSPlugin-*.pm.patch" ;;
+              pvemanagerlib) glob="stable-7/pve-manager/js/pvemanagerlib-*.js.patch" ;;
+              apidoc)       glob="stable-7/pve-docs/api-viewer/apidoc-*.js.patch" ;;
+            esac
+            latest=$(ls $glob 2>/dev/null | sort -V | tail -1 || true)
+            if [ -n "$latest" ]; then
+              cp "$latest" "${STAGING}/usr/share/freenas-proxmox/patches/${type}/7.patch"
+              echo "Bundled PVE-7 ${type} patch: $(basename $latest)"
+            else
+              echo "No PVE-7 ${type} patch found — skipping"
+            fi
+          done
+
+          echo "==> Package contents:"
+          find "${STAGING}" | sort
+
+      - name: Build .deb
+        run: |
+          sudo dpkg-deb -Zgzip --build dist "${{ steps.vars.outputs.deb_file }}"
+
+      - name: Verify .deb
+        run: |
+          echo "==> Package info:"
+          dpkg-deb --info "${{ steps.vars.outputs.deb_file }}"
+          echo ""
+          echo "==> Package contents:"
+          dpkg-deb --contents "${{ steps.vars.outputs.deb_file }}"
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.vars.outputs.deb_file }}
+          path: ${{ steps.vars.outputs.deb_file }}
+          retention-days: 30
+
+  # ── Job 4: Security scan ─────────────────────────────────────────────────────
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Scan the repository for secrets and known vulnerabilities
+      - name: Run Trivy (repo scan — secrets + misconfig)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: secret,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: 1
+          format: table
+
+      # Download and scan the built .deb
+      - name: Download built package
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.deb_file }}
+
+      - name: Extract and scan .deb contents
+        run: |
+          mkdir -p deb-contents
+          dpkg-deb --extract "${{ needs.build.outputs.deb_file }}" deb-contents/
+
+      - name: Run Trivy (package contents — vuln + secret)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: deb-contents
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          exit-code: 1
+          format: table
+
+  # ── Job 5: Publish ───────────────────────────────────────────────────────────
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    needs: [build, security]
+    # Only publish on direct pushes (not PRs) to tracked branches or tags
+    if: |
+      github.event_name == 'push' &&
+      needs.build.outputs.channel != 'none'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download built package
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.deb_file }}
+
+      - name: Publish to Cloudsmith
+        uses: cloudsmith-io/action@master
+        with:
+          api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
+          command: push
+          format: deb
+          owner: ksatechnologies
+          repo: ${{ needs.build.outputs.cloudsmith_repo }}
+          distro: debian
+          release: any-version
+          file: ${{ needs.build.outputs.deb_file }}
+
+      - name: Create draft GitHub Release
+        if: needs.build.outputs.is_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ needs.build.outputs.version }}"
+          draft: true
+          files: ${{ needs.build.outputs.deb_file }}
+          generate_release_notes: false
+          body: |
+            ## freenas-proxmox v${{ needs.build.outputs.version }}
+
+            > **Edit before publishing** — fill in tested versions below.
+
+            ### Supported Proxmox VE Versions
+            - Proxmox VE 8.x (tested: )
+            - Proxmox VE 7.x (best-effort: )
+
+            ### Supported TrueNAS Versions
+            - TrueNAS CORE:
+            - TrueNAS SCALE:
+
+            ### Installation
+            See [README](https://github.com/TheGrandWazoo/freenas-proxmox#installation).
+
+            ### Changes
+            See [CHANGELOG.md](https://github.com/TheGrandWazoo/freenas-proxmox/blob/master/CHANGELOG.md#unreleased).

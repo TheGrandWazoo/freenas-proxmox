@@ -1,0 +1,7 @@
+# dpkg trigger file for freenas-proxmox
+#
+# When Proxmox VE updates replace any of these three files, dpkg automatically
+# re-fires the postinst script so patches are re-applied without manual action.
+interest /usr/share/perl5/PVE/Storage/ZFSPlugin.pm
+interest /usr/share/pve-manager/js/pvemanagerlib.js
+interest /usr/share/pve-docs/api-viewer/apidoc.js

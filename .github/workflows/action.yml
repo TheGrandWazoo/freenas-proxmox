@@ -1,17 +1,4 @@
-name: Dispatch build of the freenas-proxmox plugin package
-
-on:
-  push:
-
-jobs:
-  dispatch:
-    name: Dispatch to the build and packager workflow.
-    runs-on: ubuntu-latest
-    steps:
-      - name: Send dispatch request to 'freenas-proxmox-packer' repo.
-        uses: peter-evans/repository-dispatch@v1
-        with:
-          token: ${{ secrets.ACCESS_TOKEN }}
-          repository: TheGrandWazoo/freenas-proxmox-packer
-          event-type: build_push
-          client-payload: '{"ref" : "${{ github.ref }}", "sha": "${{ github.sha }}"}'
+# This workflow has been superseded by build.yml
+# It previously dispatched to the external freenas-proxmox-packer repository.
+# The build pipeline now lives entirely in build.yml in this repository.
+# This file is kept only to avoid breaking any external references; it does nothing.

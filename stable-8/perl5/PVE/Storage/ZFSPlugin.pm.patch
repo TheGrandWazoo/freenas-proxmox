@@ -42,15 +42,24 @@
          } elsif ($scfg->{iscsiprovider} eq 'istgt') {
              $msg = PVE::Storage::LunCmd::Istgt::run_lun_command($scfg, $timeout, $method, @params);
          } elsif ($scfg->{iscsiprovider} eq 'iet') {
+@@ -157,7 +163,7 @@
+ sub zfs_get_lun_number {
+     my ($class, $scfg, $guid) = @_;
+
+-    die "could not find lun_number for guid $guid" if !$guid;
++    die "could not find lun_number for guid $guid" if !defined $guid;
+
+     if ($class->zfs_request($scfg, undef, 'list_view', $guid) =~ /^(\d+)$/) {
+ 	return $1;
 @@ -166,6 +172,15 @@
      die "lun_number for guid $guid is not a number";
  }
- 
+
 +# Part of the multipath enhancement
 +sub zfs_get_wwid_number {
 +    my ($class, $scfg, $guid) = @_;
 +
-+    die "could not find lun_number for guid $guid" if !$guid;
++    die "could not find lun_number for guid $guid" if !defined $guid;
 +
 +    return $class->zfs_request($scfg, undef, 'list_extent', $guid);
 +}
