@@ -39,8 +39,7 @@ jobs:
         run: |
           echo "==> Running perlcritic..."
           perlcritic --profile .perlcriticrc \
-            perl5/PVE/Storage/LunCmd/FreeNAS.pm \
-            perl5/PVE/Storage/Custom/FreeNAS.pm
+            perl5/PVE/Storage/LunCmd/FreeNAS.pm
 
       - name: Shell script lint (shellcheck)
         run: |
@@ -266,9 +265,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build, security]
     # Only publish on direct pushes (not PRs) to tracked branches or tags
-    if: |
-      github.event_name == 'push' &&
-      needs.build.outputs.channel != 'none'
+    if: github.event_name == 'push' && needs.build.outputs.channel != 'none'
 
     steps:
       - uses: actions/checkout@v4

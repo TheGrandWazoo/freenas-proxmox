@@ -1,4 +1,13 @@
-# This workflow has been superseded by build.yml
-# It previously dispatched to the external freenas-proxmox-packer repository.
-# The build pipeline now lives entirely in build.yml in this repository.
-# This file is kept only to avoid breaking any external references; it does nothing.
+# This workflow has been superseded by build.yml.
+# It is retained only so that any external links to this file do not 404.
+# It will never trigger automatically.
+name: Deprecated (superseded by build.yml)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "This workflow is deprecated. The active CI pipeline is build.yml."
