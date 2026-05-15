@@ -26,13 +26,19 @@ jobs:
       - name: Install lint tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y shellcheck libperl-critic-perl
+          sudo apt-get install -y \
+            shellcheck libperl-critic-perl \
+            libwww-perl libio-socket-ssl-perl librest-client-perl libjson-perl
+          # PVE::SafeSyslog only exists on Proxmox hosts; stub it for syntax checking
+          mkdir -p /tmp/pve-stub/PVE
+          printf 'package PVE::SafeSyslog;\nuse Exporter "import";\nour @EXPORT = qw(syslog);\nsub syslog {}\n1;\n' \
+            > /tmp/pve-stub/PVE/SafeSyslog.pm
 
       - name: Perl syntax check (all modules)
         run: |
           echo "==> Checking Perl syntax..."
           find perl5 stable-*/perl5 -name "*.pm" -print0 \
-            | xargs -0 -I{} perl -c {} \
+            | xargs -0 -I{} perl -c -I/tmp/pve-stub {} \
             && echo "All .pm files OK"
 
       - name: Perl static analysis (perlcritic)
