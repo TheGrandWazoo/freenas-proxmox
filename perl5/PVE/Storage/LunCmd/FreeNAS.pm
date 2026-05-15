@@ -165,7 +165,7 @@ sub run_lun_command {
     }
 
     syslog("error",(caller(0))[3] . " : unknown method $method");
-    return undef;
+    return;
 }
 
 #
@@ -503,7 +503,7 @@ sub freenas_iscsi_get_globalconfiguration {
         return $result;
     } else {
         freenas_api_log_error();
-        return undef;
+        return;
     }
 }
 
@@ -524,7 +524,7 @@ sub freenas_iscsi_get_extent {
         return $result;
     } else {
         freenas_api_log_error();
-        return undef;
+        return;
     }
 }
 
@@ -568,7 +568,7 @@ sub freenas_iscsi_create_extent {
         return $result;
     } else {
         freenas_api_log_error();
-        return undef;
+        return;
     }
 }
 
@@ -611,7 +611,7 @@ sub freenas_iscsi_get_target {
         return $result;
     } else {
         freenas_api_log_error();
-        return undef;
+        return;
     }
 }
 
@@ -641,7 +641,7 @@ sub freenas_iscsi_get_target_to_extent {
         return $result;
     } else {
         freenas_api_log_error();
-        return undef;
+        return;
     }
 }
 
@@ -672,7 +672,7 @@ sub freenas_iscsi_create_target_to_extent {
         return $result;
     } else {
         freenas_api_log_error();
-        return undef;
+        return;
     }
 }
 
