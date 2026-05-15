@@ -56,14 +56,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Dry-run patch: ZFSPlugin (PVE 8)
+      - name: "Dry-run patch: ZFSPlugin (PVE 8)"
         run: |
           patch --dry-run --ignore-whitespace \
             stable-8/perl5/PVE/Storage/ZFSPlugin.pm.orig \
             < stable-8/perl5/PVE/Storage/ZFSPlugin.pm.patch \
             && echo "ZFSPlugin PVE-8 patch: OK"
 
-      - name: Dry-run patch: apidoc.js (PVE 8)
+      - name: "Dry-run patch: apidoc.js (PVE 8)"
         run: |
           patch --dry-run --ignore-whitespace \
             stable-8/pve-docs/api-viewer/apidoc.js.orig \
