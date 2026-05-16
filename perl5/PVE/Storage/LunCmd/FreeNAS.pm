@@ -346,6 +346,9 @@ sub freenas_api_connect {
     $freenas_server_list->{$apihost}->addHeader('Content-Type', 'application/json');
     if (defined($scfg->{'truenas_token_auth'}) && $scfg->{'truenas_token_auth'}) {
         syslog("info", (caller(0))[3] . " : Authentication using Bearer Token Auth");
+        if (!$scfg->{freenas_use_ssl}) {
+            syslog("warn", (caller(0))[3] . " : Bearer Token used without SSL — TrueNAS 25.04+ revokes API keys sent over plain HTTP; enable 'Use SSL' in storage config");
+        }
         $freenas_server_list->{$apihost}->addHeader('Authorization', 'Bearer ' . $scfg->{truenas_secret});
     } else {
         syslog("info", (caller(0))[3] . " : Authentication using Basic Auth");
@@ -370,10 +373,11 @@ sub freenas_api_connect {
     } elsif ($code == 200 && ($type =~ /^text\/plain/ || $type =~ /^application\/json/)) {
         syslog("info", (caller(0))[3] . " : REST connection successful to '" . $apihost . "' using the '" . $scheme . "' protocol");
         $runawayprevent = 0;
-    # A 302 or 200 (We already check for the correct 'type' above with a 200 so why add additional conditionals).
-    # So change to v2.0 APIs.
-    } elsif ($code == 302 || $code == 200) {
-        syslog("info", (caller(0))[3] . " : Changing to v2.0 API's");
+    # A 302 or 200 (wrong content-type) means v1.0 is redirecting — upgrade to v2.0.
+    # TrueNAS 25.04+ removed v1.0 entirely and returns 404 instead of 302; treat
+    # that the same way so long as we are still probing the v1.0 endpoint.
+    } elsif ($code == 302 || $code == 200 || ($code == 404 && $apiping =~ /v1\.0/)) {
+        syslog("info", (caller(0))[3] . " : v1.0 API unavailable (HTTP $code) — upgrading to v2.0");
         $runawayprevent++;
         $apiping =~ s/v1\.0/v2\.0/;
         freenas_api_connect($scfg);
