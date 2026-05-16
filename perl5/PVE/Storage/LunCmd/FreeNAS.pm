@@ -1,9 +1,9 @@
 package PVE::Storage::LunCmd::FreeNAS;
 
-our $VERSION = '2.3.0';
-
 use strict;
 use warnings;
+
+our $VERSION = '2.3.0';
 use Data::Dumper;
 use PVE::SafeSyslog;
 use IO::Socket::SSL;
