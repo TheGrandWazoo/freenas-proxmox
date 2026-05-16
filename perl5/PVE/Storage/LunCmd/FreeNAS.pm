@@ -555,9 +555,10 @@ sub freenas_iscsi_create_extent {
     my $device = $lun_path;
     $device =~ s/^\/dev\///; # strip /dev/
 
+    my %extent_vars = ('$name' => $name, '$device' => $device);
     my $post_body = {};
     while ((my $key, my $value) = each %{$freenas_api_methods->{'extent'}->{'post_body'}}) {
-        $post_body->{$key} = ($value =~ /^\$.+$/) ? eval $value : $value;
+        $post_body->{$key} = exists $extent_vars{$value} ? $extent_vars{$value} : $value;
     }
 
     freenas_api_call($scfg, 'POST', $freenas_api_methods->{'extent'}->{'resource'}, $post_body);
@@ -659,9 +660,10 @@ sub freenas_iscsi_create_target_to_extent {
 
     syslog("info", (caller(0))[3] . " : called with (target_id=$target_id, extent_id=$extent_id, lun_id=$lun_id)");
 
+    my %tte_vars = ('$target_id' => $target_id, '$extent_id' => $extent_id, '$lun_id' => $lun_id);
     my $post_body = {};
     while ((my $key, my $value) = each %{$freenas_api_methods->{'targetextent'}->{'post_body'}}) {
-        $post_body->{$key} = ($value =~ /^\$.+$/) ? eval $value : $value;
+        $post_body->{$key} = exists $tte_vars{$value} ? $tte_vars{$value} : $value;
     }
 
     freenas_api_call($scfg, 'POST', $freenas_api_methods->{'targetextent'}->{'resource'}, $post_body);
