@@ -111,11 +111,10 @@ jobs:
           REF="${{ github.ref }}"
           IS_RELEASE="false"
 
-          # Base version: nearest ancestor v* tag, stripping the 'v' prefix and any
-          # pre-release suffix (e.g. v2.3.0-pre → 2.3.0). This lets us use anchor
-          # tags like v2.3.0-pre to set the version series without triggering a release.
-          BASE_VERSION="$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null \
-            | sed 's/^v//' | sed 's/[^0-9.].*$//' || echo '0.0.0')"
+          # Base version from our $VERSION in FreeNAS.pm — the single source of truth.
+          # Bump that variable when starting a new release series; git tags trigger publishing.
+          BASE_VERSION="$(perl -ne 'if (/our\s+\$VERSION\s*=\s*['"'"'"]([^'"'"'"]+)/) { print $1; exit }' \
+            perl5/PVE/Storage/LunCmd/FreeNAS.pm 2>/dev/null || echo '0.0.0')"
 
           # Only an exact vX.Y.Z tag (no suffix) is a stable release.
           if [[ "$REF" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -123,6 +122,9 @@ jobs:
             CHANNEL="stable"
             CLOUDSMITH_REPO="truenas-proxmox"
             IS_RELEASE="true"
+            if [[ "$VERSION" != "$BASE_VERSION" ]]; then
+              echo "::warning::Tag version ($VERSION) does not match \$VERSION in FreeNAS.pm ($BASE_VERSION)"
+            fi
 
           elif [[ "$REF" == refs/heads/master ]]; then
             VERSION="${BASE_VERSION}-beta+${SHORT_SHA}"

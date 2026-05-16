@@ -1,5 +1,7 @@
 package PVE::Storage::LunCmd::FreeNAS;
 
+our $VERSION = '2.3.0';
+
 use strict;
 use warnings;
 use Data::Dumper;
