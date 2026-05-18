@@ -466,7 +466,7 @@ sub freenas_api_call {
     syslog("info", (caller(0))[3] . " : called for host '" . $apihost . "'");
 
     $method = uc($method);
-    if (! $method =~ /^(?>GET|DELETE|POST)$/) {
+    if ($method !~ /^(?:GET|DELETE|POST)$/) {
         syslog("info", (caller(0))[3] . " : Invalid HTTP RESTful service method '$method'");
         die "Invalid HTTP RESTful service method '$method' used.";
     }
