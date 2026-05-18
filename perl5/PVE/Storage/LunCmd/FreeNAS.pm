@@ -263,16 +263,18 @@ sub run_create_lu {
 
     # Create the extent
     my $extent = freenas_iscsi_create_extent($scfg, $lun_path);
+    die "Unable to create extent for $lun_path" if !defined($extent);
 
-    # Associate the new extent to the target
+    # Associate the new extent to the target; roll back the extent if this fails
+    # to avoid leaving a dangling extent on TrueNAS (issue #214)
     my $link = freenas_iscsi_create_target_to_extent($scfg, $target_id, $extent->{'id'}, $lun_id);
-
-    if (defined($link)) {
-       syslog("info","FreeNAS::create_lu(lun_path=$lun_path, lun_id=$lun_id) : successful");
-    } else {
-       die "Unable to create lun $lun_path";
+    if (!defined($link)) {
+        syslog("err", (caller(0))[3] . " : target-to-extent failed for $lun_path -- rolling back extent $extent->{'id'}");
+        freenas_iscsi_remove_extent($scfg, $extent->{'id'});
+        die "Unable to create lun $lun_path (extent rolled back)";
     }
 
+    syslog("info", (caller(0))[3] . "(lun_path=$lun_path, lun_id=$lun_id) : successful");
     return "";
 }
 
