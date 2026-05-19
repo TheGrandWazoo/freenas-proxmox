@@ -21,7 +21,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install lint tools
         run: |
@@ -60,7 +60,7 @@ jobs:
     name: Validate Patches
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: "Dry-run patch: ZFSPlugin (PVE 8)"
         run: |
@@ -90,7 +90,7 @@ jobs:
       is_release:      ${{ steps.vars.outputs.is_release }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Fetch full history so tag-based versioning works
           fetch-depth: 0
@@ -224,7 +224,7 @@ jobs:
           dpkg-deb --contents "${{ steps.vars.outputs.deb_file }}"
 
       - name: Upload package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.vars.outputs.deb_file }}
           path: ${{ steps.vars.outputs.deb_file }}
@@ -237,7 +237,7 @@ jobs:
     needs: build
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Scan the repository for secrets and known vulnerabilities
       - name: Run Trivy (repo scan — secrets + misconfig)
@@ -252,7 +252,7 @@ jobs:
 
       # Download and scan the built .deb
       - name: Download built package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build.outputs.deb_file }}
 
@@ -280,10 +280,10 @@ jobs:
     if: github.event_name == 'push' && needs.build.outputs.channel != 'none'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download built package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build.outputs.deb_file }}
 
