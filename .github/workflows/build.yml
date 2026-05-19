@@ -315,18 +315,28 @@ jobs:
           body: |
             ## freenas-proxmox v${{ needs.build.outputs.version }}
 
-            > **Edit before publishing** — fill in tested versions below.
+            > **Edit before publishing** — fill in tested versions and remove inapplicable notices below.
 
-            ### Supported Proxmox VE Versions
-            - Proxmox VE 8.x (tested: )
+            ### ⚠️ Version Compatibility Notices
+
+            | Your Proxmox VE | What to do |
+            |:----------------|:-----------|
+            | **PVE 9+** | ❌ Do **not** install v2.x — use v3.0 when released |
+            | **PVE 8.x** | ✅ Supported. Note: PVE 8 EOL is **2026-08-31** — plan your upgrade to PVE 9 + v3.0 |
+            | **PVE 7.x** | ⚠️ Best-effort only. This is the **last v2.x release** supporting PVE 7. Do **not** upgrade to v3.0 — stay on v2.x |
+            | **PVE 6 or older** | ❌ Not supported |
+
+            ### Tested Proxmox VE Versions
+            - Proxmox VE 8.4.x (tested: )
+            - Proxmox VE 8.3.x (tested: )
             - Proxmox VE 7.x (best-effort: )
 
-            ### Supported TrueNAS Versions
+            ### Tested TrueNAS Versions
             - TrueNAS CORE:
             - TrueNAS SCALE:
 
             ### Installation
-            See [README](https://github.com/TheGrandWazoo/freenas-proxmox#installation).
+            See [README → Installation](https://github.com/TheGrandWazoo/freenas-proxmox#installation).
 
             ### Changes
             See [CHANGELOG.md](https://github.com/TheGrandWazoo/freenas-proxmox/blob/master/CHANGELOG.md#unreleased).

@@ -106,11 +106,49 @@ restart_pve_services() {
     log "Done. Refresh your Proxmox browser tab to load the updated UI."
 }
 
+# Warn the user if their PVE version is outside the supported range for this
+# plugin version.  Exits non-zero (aborting the install) only for versions so
+# old that no patches exist (< 7).
+check_pve_version() {
+    local major="$1"
+
+    if [ "$major" -lt 7 ]; then
+        log "ERROR: Proxmox VE ${major}.x is not supported by this plugin."
+        log "       PVE 5 and 6 reached end-of-life in 2019 and 2022 respectively."
+        log "       Please upgrade your Proxmox VE installation before installing this plugin."
+        exit 1
+    fi
+
+    if [ "$major" -eq 7 ]; then
+        log "WARNING: *** Proxmox VE 7 — Important Notice ***"
+        log "WARNING: v2.x is the LAST release series that supports Proxmox VE 7."
+        log "WARNING: PVE 7 support is best-effort only; no new patches will be"
+        log "WARNING: developed for it."
+        log "WARNING: When v3.0 is released, DO NOT upgrade to it — v3.0 requires"
+        log "WARNING: Proxmox VE 8 or later.  Stay on the latest v2.x release."
+    fi
+
+    if [ "$major" -eq 8 ]; then
+        log "INFO: Proxmox VE 8 reaches end-of-life on 2026-08-31."
+        log "INFO: Plan your upgrade to PVE 9 and migration to v3.0 before that date."
+    fi
+
+    if [ "$major" -ge 9 ]; then
+        log "WARNING: *** Proxmox VE ${major}.x — Not Supported by v2.x ***"
+        log "WARNING: This plugin (v2.x) is not supported on Proxmox VE 9 or later."
+        log "WARNING: Patches may fail to apply or the UI may not work correctly."
+        log "WARNING: Please use v3.0 of this plugin, which is designed for PVE 9+."
+        log "WARNING: See: https://github.com/TheGrandWazoo/freenas-proxmox/releases"
+        log "WARNING: Continuing anyway — but expect problems."
+    fi
+}
+
 # ── Entry point ──────────────────────────────────────────────────────────────
 
 major=$(detect_pve_major)
 pve_mgr_minor=$(detect_pve_manager_minor)
 log "Proxmox VE major version: ${major}, pve-manager: ${pve_mgr_minor}"
+check_pve_version "$major"
 
 case "$1" in
 

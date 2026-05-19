@@ -41,10 +41,35 @@ Proxmox VE's built-in ZFS-over-iSCSI storage type uses SSH to manage LUNs on the
 
 ## Compatibility
 
-| Plugin Version | Proxmox VE | TrueNAS CORE | TrueNAS SCALE |
-|:--------------:|:----------:|:------------:|:-------------:|
-| **3.x** (upcoming) | 8.x | 13.0-U6+ | 23.10 (Cobia)+, 24.04 (Dragonfish)+ |
-| **2.x** (current stable) | 7.x, 8.x | 11.3+ | 22.02+ |
+### Version Matrix
+
+| Plugin Version | Proxmox VE | TrueNAS CORE | TrueNAS SCALE | Status |
+|:--------------:|:----------:|:------------:|:-------------:|:------:|
+| **3.x** *(upcoming)* | 8.x, 9.x | 13.0-U6+ | Cobia (23.10)+, Dragonfish (24.04)+ | In development |
+| **2.x** *(current)* | 7.x ⚠️, 8.0–8.3 ✅, 8.4.x ✅ | 11.3+ | 22.02+ | Active |
+| **1.x** *(legacy)* | 5.x, 6.x | 11.x | — | Unsupported |
+
+### Important Version Notices
+
+> **Proxmox VE 7 users**
+>
+> v2.x is the **last release series that supports PVE 7**. PVE 7 support is best-effort only — no new patches will be developed for it.
+>
+> **Do not upgrade to v3.0** when it releases — v3.0 requires Proxmox VE 8 or later. Stay on the latest v2.x release.
+
+> **Proxmox VE 8 users**
+>
+> Proxmox VE 8 reaches **end-of-life on 2026-08-31**. Plan your upgrade to PVE 9 before that date.
+>
+> v2.x works on PVE 8. When you upgrade to PVE 9, migrate to v3.0 (coming before the EOL date).
+
+> **Proxmox VE 9+ users**
+>
+> v2.x is **not supported on PVE 9**. Use v3.0 when it is released. Do not install v2.x on a PVE 9 node.
+
+> **Proxmox VE 5 or 6 users**
+>
+> These versions are not supported. PVE 5 reached end-of-life in 2019, PVE 6 in 2022. Please upgrade your Proxmox VE installation.
 
 Check the [Releases page](https://github.com/TheGrandWazoo/freenas-proxmox/releases) for the specific Proxmox and TrueNAS versions tested against each release.
 
