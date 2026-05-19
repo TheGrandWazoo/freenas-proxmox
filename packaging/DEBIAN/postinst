@@ -18,21 +18,38 @@ log() {
     echo "[freenas-proxmox] $*" | tee -a "$LOG_FILE"
 }
 
-# Detect installed Proxmox VE major version
+# Detect installed Proxmox VE major version (e.g. "8" from "8.4.19")
 detect_pve_major() {
     local ver
     ver=$(dpkg-query --showformat='${Version}' --show proxmox-ve 2>/dev/null || echo "0")
     echo "${ver%%.*}"
 }
 
-# Find the best bundled patch for a given component and PVE major version.
-# Walks down from the detected major version until a patch file is found.
+# Detect pve-manager major.minor (e.g. "8.4" from "8.4.19").
+# Used to select minor-version-specific patches within a major series.
+detect_pve_manager_minor() {
+    local ver
+    ver=$(dpkg-query -W -f '${Version}' pve-manager 2>/dev/null || echo "0.0.0")
+    echo "${ver%.*}"
+}
+
+# Find the best bundled patch for a given component and PVE version.
+# Tries {minor}.patch (e.g. 8.4.patch) first, then walks down {major}.patch,
+# {major-1}.patch, ... until a match is found.
 find_patch() {
     local component="$1"
     local major="$2"
+    local minor="$3"   # e.g. "8.4" — may be empty
     local patch_dir="${INSTALL_DIR}/patches/${component}"
-    local ver="$major"
 
+    # Minor-version-specific patch takes priority (e.g. pvemanagerlib/8.4.patch)
+    if [ -n "$minor" ] && [ -f "${patch_dir}/${minor}.patch" ]; then
+        echo "${patch_dir}/${minor}.patch"
+        return 0
+    fi
+
+    # Fall back to major-version patch, walking down until one is found
+    local ver="$major"
     while [ "$ver" -ge 5 ]; do
         if [ -f "${patch_dir}/${ver}.patch" ]; then
             echo "${patch_dir}/${ver}.patch"
@@ -92,7 +109,8 @@ restart_pve_services() {
 # ── Entry point ──────────────────────────────────────────────────────────────
 
 major=$(detect_pve_major)
-log "Proxmox VE major version detected: ${major}"
+pve_mgr_minor=$(detect_pve_manager_minor)
+log "Proxmox VE major version: ${major}, pve-manager: ${pve_mgr_minor}"
 
 case "$1" in
 
@@ -105,15 +123,15 @@ case "$1" in
             filename="${filename%.*}"   # strip extension
             case "$filename" in
                 ZFSPlugin)
-                    patch_file=$(find_patch "ZFSPlugin" "$major" || true)
+                    patch_file=$(find_patch "ZFSPlugin" "$major" "$pve_mgr_minor" || true)
                     apply_patch "$ZFSPLUGIN_PATH" "$patch_file" "ZFSPlugin.pm"
                     ;;
                 pvemanagerlib)
-                    patch_file=$(find_patch "pvemanagerlib" "$major" || true)
+                    patch_file=$(find_patch "pvemanagerlib" "$major" "$pve_mgr_minor" || true)
                     apply_patch "$PVEMANAGER_PATH" "$patch_file" "pvemanagerlib.js"
                     ;;
                 apidoc)
-                    patch_file=$(find_patch "apidoc" "$major" || true)
+                    patch_file=$(find_patch "apidoc" "$major" "$pve_mgr_minor" || true)
                     apply_patch "$APIDOC_PATH" "$patch_file" "apidoc.js"
                     ;;
             esac
@@ -127,13 +145,13 @@ case "$1" in
         log "Configuring freenas-proxmox (previous version: ${2:-none})"
         CHANGED="no"
 
-        patch_file=$(find_patch "ZFSPlugin"    "$major" || true)
+        patch_file=$(find_patch "ZFSPlugin"     "$major" "$pve_mgr_minor" || true)
         apply_patch "$ZFSPLUGIN_PATH"  "$patch_file" "ZFSPlugin.pm"    && CHANGED="yes"
 
-        patch_file=$(find_patch "pvemanagerlib" "$major" || true)
+        patch_file=$(find_patch "pvemanagerlib" "$major" "$pve_mgr_minor" || true)
         apply_patch "$PVEMANAGER_PATH" "$patch_file" "pvemanagerlib.js" && CHANGED="yes"
 
-        patch_file=$(find_patch "apidoc"        "$major" || true)
+        patch_file=$(find_patch "apidoc"        "$major" "$pve_mgr_minor" || true)
         apply_patch "$APIDOC_PATH"     "$patch_file" "apidoc.js"       && CHANGED="yes"
 
         install_files

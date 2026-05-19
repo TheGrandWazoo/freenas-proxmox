@@ -184,13 +184,18 @@ jobs:
           cp perl5/PVE/Storage/LunCmd/FreeNAS.pm  "${STAGING}/usr/share/freenas-proxmox/FreeNAS.pm"
           cp perl5/REST/Client.pm                  "${STAGING}/usr/share/freenas-proxmox/REST-Client.pm"
 
-          # PVE 8 patches (primary supported version)
+          # PVE 8 patches (8.0.x – 8.3.x)
           cp stable-8/perl5/PVE/Storage/ZFSPlugin.pm.patch \
              "${STAGING}/usr/share/freenas-proxmox/patches/ZFSPlugin/8.patch"
           cp stable-8/pve-manager/js/pvemanagerlib.js.patch \
              "${STAGING}/usr/share/freenas-proxmox/patches/pvemanagerlib/8.patch"
           cp stable-8/pve-docs/api-viewer/apidoc.js.patch \
              "${STAGING}/usr/share/freenas-proxmox/patches/apidoc/8.patch"
+
+          # PVE 8.4.x pvemanagerlib patch — JS was reformatted in 8.4, incompatible with 8.patch
+          cp stable-8/pve-manager/js/pvemanagerlib-8.4.14_1.js.patch \
+             "${STAGING}/usr/share/freenas-proxmox/patches/pvemanagerlib/8.4.patch"
+          echo "Bundled PVE 8.4.x pvemanagerlib patch"
 
           # PVE 7 patches (best-effort — use latest versioned patch available)
           for type in ZFSPlugin pvemanagerlib apidoc; do
