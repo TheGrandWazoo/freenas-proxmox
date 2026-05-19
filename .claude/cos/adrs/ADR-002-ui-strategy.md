@@ -1,7 +1,7 @@
 # ADR-002: UI Integration Strategy
 
 **Date**: 2026-05-15  
-**Status**: Under Discussion  
+**Status**: Accepted  
 **Deciders**: Kevin Adams
 
 ## Context

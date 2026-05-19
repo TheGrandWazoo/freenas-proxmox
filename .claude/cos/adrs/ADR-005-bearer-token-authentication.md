@@ -1,7 +1,7 @@
 # ADR-005: Bearer Token Authentication as Primary Auth Method
 
 **Date**: 2026-05-15  
-**Status**: Decided  
+**Status**: Accepted  
 **Deciders**: Kevin Adams
 
 ## Context

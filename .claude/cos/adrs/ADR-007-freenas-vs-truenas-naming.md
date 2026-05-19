@@ -1,7 +1,7 @@
 # ADR-007: FreeNAS vs TrueNAS Module Naming
 
 **Date**: 2026-05-15  
-**Status**: Decided  
+**Status**: Accepted  
 **Deciders**: Kevin Adams
 
 ## Context

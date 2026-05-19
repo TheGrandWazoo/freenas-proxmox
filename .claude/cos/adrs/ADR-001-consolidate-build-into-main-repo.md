@@ -1,7 +1,7 @@
 # ADR-001: Consolidate Build Pipeline into Main Repo
 
 **Date**: 2026-05-15  
-**Status**: Proposed  
+**Status**: Accepted  
 **Deciders**: Kevin Adams
 
 ## Context

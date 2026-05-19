@@ -1,7 +1,7 @@
 # ADR-006: Package Versioning Strategy
 
 **Date**: 2026-05-15  
-**Status**: Decided  
+**Status**: Accepted  
 **Deciders**: Kevin Adams
 
 ## Context
