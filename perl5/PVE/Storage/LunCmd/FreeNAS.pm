@@ -261,17 +261,25 @@ sub run_create_lu {
     my $target_id = freenas_get_targetid($scfg);
     die "Unable to find the target id for $scfg->{target}" if !defined($target_id);
 
-    # Create the extent
-    my $extent = freenas_iscsi_create_extent($scfg, $lun_path);
-    die "Unable to create extent for $lun_path" if !defined($extent);
+    my ($extent_id, $link_id);
+    eval {
+        my $extent = freenas_iscsi_create_extent($scfg, $lun_path);
+        die "Unable to create extent for $lun_path" if !defined($extent);
+        $extent_id = $extent->{'id'};
 
-    # Associate the new extent to the target; roll back the extent if this fails
-    # to avoid leaving a dangling extent on TrueNAS (issue #214)
-    my $link = freenas_iscsi_create_target_to_extent($scfg, $target_id, $extent->{'id'}, $lun_id);
-    if (!defined($link)) {
-        syslog("err", (caller(0))[3] . " : target-to-extent failed for $lun_path -- rolling back extent $extent->{'id'}");
-        freenas_iscsi_remove_extent($scfg, $extent->{'id'});
-        die "Unable to create lun $lun_path (extent rolled back)";
+        my $link = freenas_iscsi_create_target_to_extent($scfg, $target_id, $extent_id, $lun_id);
+        die "Unable to link extent to target for $lun_path" if !defined($link);
+        $link_id = $link->{'id'};
+
+        # Set FREENAS_TEST_ROLLBACK=1 in pvedaemon environment to exercise
+        # rollback without a real failure (#239)
+        die "TEST: forced rollback for #239 verification" if $ENV{FREENAS_TEST_ROLLBACK};
+    };
+    if (my $err = $@) {
+        syslog("err", (caller(0))[3] . " : rolling back after error for $lun_path: $err");
+        freenas_iscsi_remove_target_to_extent($scfg, $link_id)   if defined $link_id;
+        freenas_iscsi_remove_extent($scfg, $extent_id)           if defined $extent_id;
+        die "Unable to create lun $lun_path (rolled back): $err";
     }
 
     syslog("info", (caller(0))[3] . "(lun_path=$lun_path, lun_id=$lun_id) : successful");
