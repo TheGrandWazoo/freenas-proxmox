@@ -279,6 +279,7 @@ sub run_create_lu {
         syslog("err", (caller(0))[3] . " : rolling back after error for $lun_path: $err");
         freenas_iscsi_remove_target_to_extent($scfg, $link_id)   if defined $link_id;
         freenas_iscsi_remove_extent($scfg, $extent_id)           if defined $extent_id;
+        freenas_delete_zvol($scfg, $lun_path)                    if defined $extent_id;
         die "Unable to create lun $lun_path (rolled back): $err";
     }
 
@@ -330,6 +331,10 @@ sub run_delete_lu {
 
     # Remove the link
     my $remove_link = freenas_iscsi_remove_target_to_extent($scfg, $link->{'id'});
+
+    # Explicitly delete the underlying zvol — remove:true on extent DELETE is
+    # unreliable on TrueNAS SCALE 24.10+ (#239)
+    freenas_delete_zvol($scfg, $params[0]);
 
     if($remove_link == 1 && $remove_extent == 1) {
         syslog("info", (caller(0))[3] . "(lun_path=$lun_path) : successful");
@@ -594,6 +599,40 @@ sub freenas_iscsi_create_extent {
     } else {
         freenas_api_log_error();
         return;
+    }
+}
+
+#
+# Explicitly delete the underlying ZFS zvol via the pool/dataset API.
+# The extent DELETE with remove:true is unreliable on TrueNAS SCALE 24.10+
+# (extent config is removed but the zvol is left behind).  This function
+# is a belt-and-suspenders call after every extent removal.
+# Only runs on v2.0; v1.0 hosts are expected to handle it via remove:true.
+# Parameters:
+#    - scfg
+#    - lun_path  (either /dev/zvol/tank/... or zvol/tank/... form)
+#
+sub freenas_delete_zvol {
+    my ($scfg, $lun_path) = @_;
+
+    my $apihost    = defined($scfg->{freenas_apiv4_host}) ? $scfg->{freenas_apiv4_host} : $scfg->{portal};
+    my $api_version = ($freenas_server_list->{$apihost}{api_version} // $freenas_api_version) // '';
+    return 1 unless $api_version eq 'v2.0';
+
+    my $dataset = $lun_path;
+    $dataset =~ s{^/dev/zvol/}{};   # strip /dev/zvol/ prefix (run_create_lu form)
+    $dataset =~ s{^zvol/}{};        # strip zvol/ prefix (run_delete_lu form after $dev_prefix strip)
+    $dataset =~ s{/}{%2F}g;         # URL-encode path separators for REST endpoint
+
+    syslog("info", (caller(0))[3] . " : explicitly deleting zvol dataset '$dataset'");
+    freenas_api_call($scfg, 'DELETE', "/api/v2.0/pool/dataset/id/$dataset/", {"recursive" => \0});
+    my $code = $freenas_rest_connection->responseCode();
+    if ($code == 200 || $code == 204) {
+        syslog("info", (caller(0))[3] . " : zvol '$dataset' deleted successfully");
+        return 1;
+    } else {
+        syslog("err", (caller(0))[3] . " : WARNING: could not delete zvol '$dataset' (HTTP $code) — manual cleanup may be needed");
+        return 0;
     }
 }
 
