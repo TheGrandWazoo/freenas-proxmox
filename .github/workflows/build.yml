@@ -187,6 +187,11 @@ jobs:
           # PVE 8 patches (8.0.x – 8.3.x)
           cp stable-8/perl5/PVE/Storage/ZFSPlugin.pm.patch \
              "${STAGING}/usr/share/freenas-proxmox/patches/ZFSPlugin/8.patch"
+
+          # PVE 8.4.x ZFSPlugin patch — indentation changed in 8.4, incompatible with 8.patch
+          cp stable-8/perl5/PVE/Storage/ZFSPlugin-8.4.14_1.pm.patch \
+             "${STAGING}/usr/share/freenas-proxmox/patches/ZFSPlugin/8.4.patch"
+          echo "Bundled PVE 8.4.x ZFSPlugin patch"
           cp stable-8/pve-manager/js/pvemanagerlib.js.patch \
              "${STAGING}/usr/share/freenas-proxmox/patches/pvemanagerlib/8.patch"
           cp stable-8/pve-docs/api-viewer/apidoc.js.patch \
