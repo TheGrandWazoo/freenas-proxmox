@@ -1,5 +1,5 @@
 --- /tmp/pvemanagerlib-8.4.14-stock.js	2026-05-19 17:46:16.553917259 -0400
-+++ /tmp/pvemanagerlib-8.4.14-patched.js	2026-05-19 17:49:36.037913599 -0400
++++ /tmp/pvemanagerlib-8.4.14-patched-v2.js	2026-05-19 21:35:03.162563535 -0400
 @@ -9745,6 +9745,7 @@
      alias: ['widget.pveiScsiProviderSelector'],
      comboItems: [
@@ -8,7 +8,88 @@
          ['istgt', 'istgt'],
          ['iet', 'IET'],
          ['LIO', 'LIO'],
-@@ -38511,6 +38512,47 @@
+@@ -62673,10 +62674,17 @@
+     viewModel: {
+         parent: null,
+         data: {
+-            isLIO: false,
+             isComstar: true,
++            isFreeNAS: false,
++            isLIO: false,
++            isToken: false,
+             hasWriteCacheOption: true,
+         },
++        formulas: {
++            hideUsername: function(get) {
++                return (!get('isFreeNAS') || !(get('isFreeNAS') && !get('isToken')));
++            },
++        },
+     },
+ 
+     controller: {
+@@ -62685,12 +62693,41 @@
+             'field[name=iscsiprovider]': {
+                 change: 'changeISCSIProvider',
+             },
++            'field[name=truenas_token_auth]': {
++                change: 'changeUsername',
++            },
+         },
+         changeISCSIProvider: function (f, newVal, oldVal) {
++            var me = this;
+             var vm = this.getViewModel();
+             vm.set('isLIO', newVal === 'LIO');
+             vm.set('isComstar', newVal === 'comstar');
+-            vm.set('hasWriteCacheOption', newVal === 'comstar' || newVal === 'istgt');
++            vm.set('isFreeNAS', newVal === 'freenas');
++            vm.set('hasWriteCacheOption', newVal === 'comstar' || newVal === 'freenas' || newVal === 'istgt');
++            if (newVal !== 'freenas') {
++                me.lookupReference('freenas_use_ssl_field').setValue(false);
++                me.lookupReference('truenas_token_auth_field').setValue(false);
++                me.lookupReference('freenas_apiv4_host_field').setValue('');
++                me.lookupReference('freenas_user_field').setValue('');
++                me.lookupReference('freenas_user_field').allowBlank = true;
++                me.lookupReference('truenas_secret_field').setValue('');
++                me.lookupReference('truenas_secret_field').allowBlank = true;
++                me.lookupReference('truenas_confirm_secret_field').setValue('');
++                me.lookupReference('truenas_confirm_secret_field').allowBlank = true;
++            } else {
++                me.lookupReference('freenas_user_field').allowBlank = false;
++                me.lookupReference('truenas_secret_field').allowBlank = false;
++                me.lookupReference('truenas_confirm_secret_field').allowBlank = false;
++            }
++        },
++        changeUsername: function (f, newVal, oldVal) {
++            var me = this;
++            var vm = me.getViewModel();
++            vm.set('isToken', newVal);
++            me.lookupReference('freenas_user_field').allowBlank = newVal;
++            if (newVal) {
++                me.lookupReference('freenas_user_field').setValue('');
++            }
+         },
+     },
+ 
+@@ -62703,11 +62740,18 @@
+ 
+         values.nowritecache = values.writecache ? 0 : 1;
+         delete values.writecache;
++        if (values.freenas_password) {
++            values.truenas_secret = values.freenas_password;
++        }
+ 
+         return me.callParent([values]);
+     },
+ 
+     setValues: function (values) {
++        if (values.freenas_password) {
++            values.truenas_secret = values.freenas_password;
++        }
++        values.truenas_confirm_secret = values.truenas_secret;
+         values.writecache = values.nowritecache ? 0 : 1;
+         this.callParent([values]);
+     },
+@@ -62715,6 +62759,47 @@
      initComponent: function () {
          var me = this;
  
@@ -55,88 +136,7 @@
 +
          me.column1 = [
              {
-                 xtype: 'proxmoxintegerfield',
-@@ -62673,10 +62715,17 @@
-     viewModel: {
-         parent: null,
-         data: {
--            isLIO: false,
-             isComstar: true,
-+            isFreeNAS: false,
-+            isLIO: false,
-+            isToken: false,
-             hasWriteCacheOption: true,
-         },
-+        formulas: {
-+            hideUsername: function(get) {
-+                return (!get('isFreeNAS') || !(get('isFreeNAS') && !get('isToken')));
-+            },
-+        },
-     },
- 
-     controller: {
-@@ -62685,12 +62734,41 @@
-             'field[name=iscsiprovider]': {
-                 change: 'changeISCSIProvider',
-             },
-+            'field[name=truenas_token_auth]': {
-+                change: 'changeUsername',
-+            },
-         },
-         changeISCSIProvider: function (f, newVal, oldVal) {
-+            var me = this;
-             var vm = this.getViewModel();
-             vm.set('isLIO', newVal === 'LIO');
-             vm.set('isComstar', newVal === 'comstar');
--            vm.set('hasWriteCacheOption', newVal === 'comstar' || newVal === 'istgt');
-+            vm.set('isFreeNAS', newVal === 'freenas');
-+            vm.set('hasWriteCacheOption', newVal === 'comstar' || newVal === 'freenas' || newVal === 'istgt');
-+            if (newVal !== 'freenas') {
-+                me.lookupReference('freenas_use_ssl_field').setValue(false);
-+                me.lookupReference('truenas_token_auth_field').setValue(false);
-+                me.lookupReference('freenas_apiv4_host_field').setValue('');
-+                me.lookupReference('freenas_user_field').setValue('');
-+                me.lookupReference('freenas_user_field').allowBlank = true;
-+                me.lookupReference('truenas_secret_field').setValue('');
-+                me.lookupReference('truenas_secret_field').allowBlank = true;
-+                me.lookupReference('truenas_confirm_secret_field').setValue('');
-+                me.lookupReference('truenas_confirm_secret_field').allowBlank = true;
-+            } else {
-+                me.lookupReference('freenas_user_field').allowBlank = false;
-+                me.lookupReference('truenas_secret_field').allowBlank = false;
-+                me.lookupReference('truenas_confirm_secret_field').allowBlank = false;
-+            }
-+        },
-+        changeUsername: function (f, newVal, oldVal) {
-+            var me = this;
-+            var vm = me.getViewModel();
-+            vm.set('isToken', newVal);
-+            me.lookupReference('freenas_user_field').allowBlank = newVal;
-+            if (newVal) {
-+                me.lookupReference('freenas_user_field').setValue('');
-+            }
-         },
-     },
- 
-@@ -62703,11 +62781,18 @@
- 
-         values.nowritecache = values.writecache ? 0 : 1;
-         delete values.writecache;
-+        if (values.freenas_password) {
-+            values.truenas_secret = values.freenas_password;
-+        }
- 
-         return me.callParent([values]);
-     },
- 
-     setValues: function (values) {
-+        if (values.freenas_password) {
-+            values.truenas_secret = values.freenas_password;
-+        }
-+        values.truenas_confirm_secret = values.truenas_secret;
-         values.writecache = values.nowritecache ? 0 : 1;
-         this.callParent([values]);
-     },
+                 xtype: me.isCreate ? 'textfield' : 'displayfield',
 @@ -62749,9 +62834,60 @@
                  name: 'comstar_tg',
                  value: '',
