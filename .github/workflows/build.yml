@@ -117,27 +117,31 @@ jobs:
             perl5/PVE/Storage/LunCmd/FreeNAS.pm 2>/dev/null || echo '0.0.0')"
 
           # Only an exact vX.Y.Z tag (no suffix) is a stable release.
+          # Stable packages use a "-1" Debian revision so they sort higher than
+          # any pre-release build (e.g. 2.3.0~beta+sha < 2.3.0-1).
+          # Pre-release builds use "~" (tilde) which sorts BELOW the base version
+          # in dpkg, ensuring stable always wins on apt upgrade.
           if [[ "$REF" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            VERSION="${REF#refs/tags/v}"
+            VERSION="${REF#refs/tags/v}-1"
             CHANNEL="stable"
             CLOUDSMITH_REPO="truenas-proxmox"
             IS_RELEASE="true"
-            if [[ "$VERSION" != "$BASE_VERSION" ]]; then
-              echo "::warning::Tag version ($VERSION) does not match \$VERSION in FreeNAS.pm ($BASE_VERSION)"
+            if [[ "${REF#refs/tags/v}" != "$BASE_VERSION" ]]; then
+              echo "::warning::Tag version (${REF#refs/tags/v}) does not match \$VERSION in FreeNAS.pm ($BASE_VERSION)"
             fi
 
           elif [[ "$REF" == refs/heads/master ]]; then
-            VERSION="${BASE_VERSION}-beta+${SHORT_SHA}"
+            VERSION="${BASE_VERSION}~beta+${SHORT_SHA}"
             CHANNEL="testing"
             CLOUDSMITH_REPO="truenas-proxmox-testing"
 
           elif [[ "$REF" == refs/heads/feature_* ]]; then
-            VERSION="${BASE_VERSION}-alpha+${SHORT_SHA}"
+            VERSION="${BASE_VERSION}~alpha+${SHORT_SHA}"
             CHANNEL="development"
             CLOUDSMITH_REPO="truenas-proxmox-snapshots"
 
           else
-            VERSION="${BASE_VERSION}-dev+${SHORT_SHA}"
+            VERSION="${BASE_VERSION}~dev+${SHORT_SHA}"
             CHANNEL="none"
             CLOUDSMITH_REPO=""
           fi
