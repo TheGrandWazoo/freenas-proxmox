@@ -332,9 +332,11 @@ sub run_delete_lu {
     # Remove the link
     my $remove_link = freenas_iscsi_remove_target_to_extent($scfg, $link->{'id'});
 
-    # Explicitly delete the underlying zvol — remove:true on extent DELETE is
-    # unreliable on TrueNAS SCALE 24.10+ (#239)
-    freenas_delete_zvol($scfg, $params[0]);
+    # NOTE: zvol deletion is intentionally left to ZFSPlugin's SSH path (zfs_delete_zvol).
+    # Deleting it here caused a double-delete: SSH would fail, ZFSPlugin's error recovery
+    # would call run_create_lu on a missing zvol, producing a false "Unable to create lun"
+    # error in the task log (#240). freenas_delete_zvol belongs only in run_create_lu's
+    # rollback path (#239).
 
     if($remove_link == 1 && $remove_extent == 1) {
         syslog("info", (caller(0))[3] . "(lun_path=$lun_path) : successful");

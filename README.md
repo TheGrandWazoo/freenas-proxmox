@@ -165,6 +165,30 @@ After installation, **refresh your browser** to load the updated Proxmox UI. The
 
 > **Security note:** Username/password authentication sends credentials on every API call. API token authentication is preferred and may be required in future TrueNAS releases.
 
+### ZFS Block Size
+
+The **ZFS Blocksize** field controls the `-b` argument passed to `zfs create` when Proxmox provisions a new zvol on TrueNAS. Set this when adding the storage — it cannot be changed afterward without editing the config directly.
+
+| TrueNAS Product | Recommended blocksize |
+|:----------------|:----------------------|
+| TrueNAS SCALE (any version) | **16k (16384)** |
+| TrueNAS CORE | **8k (8192)** |
+
+TrueNAS SCALE ships a newer ZFS that requires a minimum block size of 16k. If you leave this at the Proxmox default of 8k on a SCALE system, every disk creation will log:
+
+```
+Warning: volblocksize (8192) is less than the default minimum block size (16384).
+To reduce wasted space a volblocksize of 16384 is recommended.
+```
+
+The disk is created successfully despite this warning, but the suboptimal block size wastes space due to internal ZFS padding on every write.
+
+**Fixing an existing storage entry:**
+
+Edit `/etc/pve/storage.cfg` on any cluster node and change `blocksize 8192` to `blocksize 16384` for your TrueNAS SCALE storage entry. No data migration is needed — only newly created zvols use the updated value. Existing zvols are unaffected.
+
+> **Note:** Automatic blocksize detection based on TrueNAS version is planned for v2.4.0 (see [#241](https://github.com/TheGrandWazoo/freenas-proxmox/issues/241)).
+
 ---
 
 ## Upgrading
@@ -203,9 +227,15 @@ Common causes:
 - API token expired or revoked
 - TrueNAS iSCSI service not running
 
+### "volblocksize is less than the default minimum block size" warning on disk creation
+
+This warning appears on TrueNAS SCALE when the storage is configured with a blocksize below 16k. The disk is created successfully — the warning is cosmetic but indicates suboptimal storage efficiency.
+
+**Fix:** see [ZFS Block Size](#zfs-block-size) in the Configuration section above. Change the blocksize for your SCALE storage entry from 8k to 16k.
+
 ### Dangling extents on TrueNAS after a failed operation
 
-If you see iSCSI extents in TrueNAS that are not associated with any target, they can be safely deleted from the TrueNAS UI. The v3.x plugin release adds automatic rollback to prevent this.
+If you see iSCSI extents in TrueNAS that are not associated with any target, they can be safely deleted from the TrueNAS UI. v2.3.0 and later automatically roll back and clean up after a failed LUN creation.
 
 ### Filing a Bug Report
 
