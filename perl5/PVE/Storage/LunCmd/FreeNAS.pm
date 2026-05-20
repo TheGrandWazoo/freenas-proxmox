@@ -334,15 +334,15 @@ sub run_delete_lu {
 
 
 sub freenas_api_connect {
-    my ($scfg) = @_;
+    my ($scfg, $ping) = @_;
+    $ping //= '/api/v1.0/system/version/';
 
     syslog("info", (caller(0))[3] . " : called");
 
     my $scheme  = $scfg->{freenas_use_ssl} ? "https" : "http";
     my $apihost = defined($scfg->{freenas_apiv4_host}) ? $scfg->{freenas_apiv4_host} : $scfg->{portal};
-    my $ping    = '/api/v1.0/system/version/';
 
-    if (!defined $freenas_server_list->{$apihost}) {
+    if (!defined $freenas_server_list->{$apihost} || !defined $freenas_server_list->{$apihost}{client}) {
         $freenas_server_list->{$apihost} = {
             client        => REST::Client->new(),
             product_name  => undef,
@@ -390,13 +390,13 @@ sub freenas_api_connect {
         syslog("info", (caller(0))[3] . " : v1.0 API unavailable (HTTP $code) — upgrading to v2.0");
         $host->{runaway_count}++;
         $ping =~ s/v1\.0/v2\.0/;
-        freenas_api_connect($scfg);
+        freenas_api_connect($scfg, $ping);
     # A 307 from FreeNAS means redirect http to https.
     } elsif ($code == 307) {
         syslog("info", (caller(0))[3] . " : Redirecting to HTTPS protocol");
         $host->{runaway_count}++;
         $scfg->{freenas_use_ssl} = 1;
-        freenas_api_connect($scfg);
+        freenas_api_connect($scfg, $ping);
     # For now, any other code we fail.
     } else {
         freenas_api_log_error($host->{client});
