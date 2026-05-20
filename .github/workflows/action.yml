@@ -1,17 +1,13 @@
-name: Dispatch build of the freenas-proxmox plugin package
+# This workflow has been superseded by build.yml.
+# It is retained only so that any external links to this file do not 404.
+# It will never trigger automatically.
+name: Deprecated (superseded by build.yml)
 
 on:
-  push:
+  workflow_dispatch:
 
 jobs:
-  dispatch:
-    name: Dispatch to the build and packager workflow.
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - name: Send dispatch request to 'freenas-proxmox-packer' repo.
-        uses: peter-evans/repository-dispatch@v1
-        with:
-          token: ${{ secrets.ACCESS_TOKEN }}
-          repository: TheGrandWazoo/freenas-proxmox-packer
-          event-type: build_push
-          client-payload: '{"ref" : "${{ github.ref }}", "sha": "${{ github.sha }}"}'
+      - run: echo "This workflow is deprecated. The active CI pipeline is build.yml."

@@ -1,0 +1,104 @@
+#!/bin/bash
+# postrm: freenas-proxmox removal script
+# Reverses patches applied to Proxmox VE system files and removes installed plugin files.
+set -e
+
+LIB_PATH="/usr/share"
+LOG_FILE="/var/log/freenas-proxmox-install.log"
+
+ZFSPLUGIN_PATH="/perl5/PVE/Storage/ZFSPlugin.pm"
+PVEMANAGER_PATH="/pve-manager/js/pvemanagerlib.js"
+APIDOC_PATH="/pve-docs/api-viewer/apidoc.js"
+FREENAS_PM_PATH="/perl5/PVE/Storage/LunCmd/FreeNAS.pm"
+INSTALL_DIR="/usr/share/freenas-proxmox"
+
+log() {
+    echo "[freenas-proxmox] $*" | tee -a "$LOG_FILE"
+}
+
+# Restore a file from the .orig backup that patch --backup created.
+restore_orig() {
+    local target_rel="$1"
+    local label="$2"
+    local target="${LIB_PATH}${target_rel}"
+    local orig="${target}.orig"
+
+    if ! grep -q "freenas" "$target" 2>/dev/null; then
+        log "${label} does not appear to be patched — skipping restore"
+        return 0
+    fi
+
+    if [ -f "$orig" ]; then
+        log "Restoring ${label} from .orig backup"
+        cp "$orig" "$target" && rm -f "$orig"
+        log "${label} restored"
+    else
+        log "WARNING: No .orig backup found for ${label} — Proxmox VE reinstall may be needed"
+        log "         Run: apt install --reinstall pve-manager libpve-storage-perl pve-docs"
+    fi
+}
+
+remove_plugin_files() {
+    if [ -f "${LIB_PATH}${FREENAS_PM_PATH}" ]; then
+        log "Removing ${LIB_PATH}${FREENAS_PM_PATH}"
+        rm -f "${LIB_PATH}${FREENAS_PM_PATH}"
+    fi
+    # REST/Client.pm is owned by librest-client-perl; do not remove it here.
+}
+
+restart_pve_services() {
+    log "Restarting Proxmox VE services ..."
+    pvedaemon restart  && log "pvedaemon restarted"
+    pveproxy restart   && log "pveproxy restarted"
+    pvestatd restart   && log "pvestatd restarted"
+    systemctl restart pvescheduler.service && log "pvescheduler restarted"
+}
+
+# ── Entry point ──────────────────────────────────────────────────────────────
+
+case "$1" in
+
+    remove)
+        log "Removing freenas-proxmox — restoring Proxmox VE files ..."
+
+        restore_orig "$ZFSPLUGIN_PATH"  "ZFSPlugin.pm"
+        restore_orig "$PVEMANAGER_PATH" "pvemanagerlib.js"
+        restore_orig "$APIDOC_PATH"     "apidoc.js"
+        remove_plugin_files
+        restart_pve_services
+
+        log "freenas-proxmox removed. Refresh your Proxmox browser tab."
+        exit 0
+        ;;
+
+    upgrade)
+        # On upgrade the new package's postinst will re-apply everything.
+        # Just restore the originals cleanly so the new patch applies to a fresh file.
+        log "Preparing for upgrade — restoring unpatched Proxmox VE files ..."
+
+        restore_orig "$ZFSPLUGIN_PATH"  "ZFSPlugin.pm"
+        restore_orig "$PVEMANAGER_PATH" "pvemanagerlib.js"
+        restore_orig "$APIDOC_PATH"     "apidoc.js"
+        remove_plugin_files
+
+        exit 0
+        ;;
+
+    purge)
+        log "Purging freenas-proxmox ..."
+        rm -rf "$INSTALL_DIR"
+        rm -f  "$LOG_FILE"
+        exit 0
+        ;;
+
+    failed-upgrade|disappear|abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+
+    *)
+        echo "$0: called with unknown argument '$1'" >&2
+        exit 0
+        ;;
+
+esac
+
+exit 0

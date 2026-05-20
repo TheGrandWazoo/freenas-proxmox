@@ -1,0 +1,212 @@
+#!/bin/bash
+# postinst: freenas-proxmox install/upgrade/trigger script
+# Applies patches to Proxmox VE system files and installs the TrueNAS API plugin.
+# No internet access required — all files are bundled in the package.
+set -e
+
+INSTALL_DIR="/usr/share/freenas-proxmox"
+LIB_PATH="/usr/share"
+LOG_FILE="/var/log/freenas-proxmox-install.log"
+
+ZFSPLUGIN_PATH="/perl5/PVE/Storage/ZFSPlugin.pm"
+PVEMANAGER_PATH="/pve-manager/js/pvemanagerlib.js"
+APIDOC_PATH="/pve-docs/api-viewer/apidoc.js"
+FREENAS_PM_PATH="/perl5/PVE/Storage/LunCmd/FreeNAS.pm"
+REST_CLIENT_PATH="/perl5/REST/Client.pm"
+
+log() {
+    echo "[freenas-proxmox] $*" | tee -a "$LOG_FILE"
+}
+
+# Detect installed Proxmox VE major version (e.g. "8" from "8.4.19")
+detect_pve_major() {
+    local ver
+    ver=$(dpkg-query --showformat='${Version}' --show proxmox-ve 2>/dev/null || echo "0")
+    echo "${ver%%.*}"
+}
+
+# Detect pve-manager major.minor (e.g. "8.4" from "8.4.19").
+# Used to select minor-version-specific patches within a major series.
+detect_pve_manager_minor() {
+    local ver
+    ver=$(dpkg-query -W -f '${Version}' pve-manager 2>/dev/null || echo "0.0.0")
+    echo "${ver%.*}"
+}
+
+# Find the best bundled patch for a given component and PVE version.
+# Tries {minor}.patch (e.g. 8.4.patch) first, then walks down {major}.patch,
+# {major-1}.patch, ... until a match is found.
+find_patch() {
+    local component="$1"
+    local major="$2"
+    local minor="$3"   # e.g. "8.4" — may be empty
+    local patch_dir="${INSTALL_DIR}/patches/${component}"
+
+    # Minor-version-specific patch takes priority (e.g. pvemanagerlib/8.4.patch)
+    if [ -n "$minor" ] && [ -f "${patch_dir}/${minor}.patch" ]; then
+        echo "${patch_dir}/${minor}.patch"
+        return 0
+    fi
+
+    # Fall back to major-version patch, walking down until one is found
+    local ver="$major"
+    while [ "$ver" -ge 5 ]; do
+        if [ -f "${patch_dir}/${ver}.patch" ]; then
+            echo "${patch_dir}/${ver}.patch"
+            return 0
+        fi
+        ver=$(( ver - 1 ))
+    done
+
+    log "WARNING: No bundled patch found for ${component} on Proxmox VE ${major}.x"
+    return 1
+}
+
+# Apply a patch to a target file idempotently.
+# Creates a .orig backup (via patch --backup) on first application.
+apply_patch() {
+    local target_rel="$1"
+    local patch_file="$2"
+    local label="$3"
+    local target="${LIB_PATH}${target_rel}"
+
+    [ -f "$target" ] || { log "ERROR: Target not found: ${target}"; return 1; }
+    [ -f "$patch_file" ] || { log "Skipping ${label}: patch file missing"; return 0; }
+
+    if grep -q "freenas" "$target" 2>/dev/null; then
+        log "${label} is already patched — skipping"
+        return 0
+    fi
+
+    log "Patching ${target} ..."
+    if patch --backup --ignore-whitespace "$target" < "$patch_file" >> "$LOG_FILE" 2>&1; then
+        log "${label} patched successfully"
+    else
+        log "ERROR: Failed to patch ${label} — see ${LOG_FILE} for details"
+        return 1
+    fi
+}
+
+install_files() {
+    log "Installing ${LIB_PATH}${FREENAS_PM_PATH}"
+    mkdir -p "$(dirname "${LIB_PATH}${FREENAS_PM_PATH}")"
+    cp "${INSTALL_DIR}/FreeNAS.pm" "${LIB_PATH}${FREENAS_PM_PATH}"
+
+    log "Installing ${LIB_PATH}${REST_CLIENT_PATH}"
+    mkdir -p "$(dirname "${LIB_PATH}${REST_CLIENT_PATH}")"
+    cp "${INSTALL_DIR}/REST-Client.pm" "${LIB_PATH}${REST_CLIENT_PATH}"
+}
+
+restart_pve_services() {
+    log "Restarting Proxmox VE services ..."
+    pvedaemon restart  && log "pvedaemon restarted"
+    pveproxy restart   && log "pveproxy restarted"
+    pvestatd restart   && log "pvestatd restarted"
+    systemctl restart pvescheduler.service && log "pvescheduler restarted"
+    log "Done. Refresh your Proxmox browser tab to load the updated UI."
+}
+
+# Warn the user if their PVE version is outside the supported range for this
+# plugin version.  Exits non-zero (aborting the install) only for versions so
+# old that no patches exist (< 7).
+check_pve_version() {
+    local major="$1"
+
+    if [ "$major" -lt 7 ]; then
+        log "ERROR: Proxmox VE ${major}.x is not supported by this plugin."
+        log "       PVE 5 and 6 reached end-of-life in 2019 and 2022 respectively."
+        log "       Please upgrade your Proxmox VE installation before installing this plugin."
+        exit 1
+    fi
+
+    if [ "$major" -eq 7 ]; then
+        log "WARNING: *** Proxmox VE 7 — Important Notice ***"
+        log "WARNING: v2.x is the LAST release series that supports Proxmox VE 7."
+        log "WARNING: PVE 7 support is best-effort only; no new patches will be"
+        log "WARNING: developed for it."
+        log "WARNING: When v3.0 is released, DO NOT upgrade to it — v3.0 requires"
+        log "WARNING: Proxmox VE 8 or later.  Stay on the latest v2.x release."
+    fi
+
+    if [ "$major" -eq 8 ]; then
+        log "INFO: Proxmox VE 8 reaches end-of-life on 2026-08-31."
+        log "INFO: Plan your upgrade to PVE 9 and migration to v3.0 before that date."
+    fi
+
+    if [ "$major" -ge 9 ]; then
+        log "WARNING: *** Proxmox VE ${major}.x — Not Supported by v2.x ***"
+        log "WARNING: This plugin (v2.x) is not supported on Proxmox VE 9 or later."
+        log "WARNING: Patches may fail to apply or the UI may not work correctly."
+        log "WARNING: Please use v3.0 of this plugin, which is designed for PVE 9+."
+        log "WARNING: See: https://github.com/TheGrandWazoo/freenas-proxmox/releases"
+        log "WARNING: Continuing anyway — but expect problems."
+    fi
+}
+
+# ── Entry point ──────────────────────────────────────────────────────────────
+
+major=$(detect_pve_major)
+pve_mgr_minor=$(detect_pve_manager_minor)
+log "Proxmox VE major version: ${major}, pve-manager: ${pve_mgr_minor}"
+check_pve_version "$major"
+
+case "$1" in
+
+    triggered)
+        # dpkg fired us because one of the watched PVE files was updated.
+        log "Triggered by package update — re-applying patches for: $2"
+
+        for fullpath in $2; do
+            filename=$(basename "$fullpath")
+            filename="${filename%.*}"   # strip extension
+            case "$filename" in
+                ZFSPlugin)
+                    patch_file=$(find_patch "ZFSPlugin" "$major" "$pve_mgr_minor" || true)
+                    apply_patch "$ZFSPLUGIN_PATH" "$patch_file" "ZFSPlugin.pm"
+                    ;;
+                pvemanagerlib)
+                    patch_file=$(find_patch "pvemanagerlib" "$major" "$pve_mgr_minor" || true)
+                    apply_patch "$PVEMANAGER_PATH" "$patch_file" "pvemanagerlib.js"
+                    ;;
+                apidoc)
+                    patch_file=$(find_patch "apidoc" "$major" "$pve_mgr_minor" || true)
+                    apply_patch "$APIDOC_PATH" "$patch_file" "apidoc.js"
+                    ;;
+            esac
+        done
+
+        install_files
+        exit 0
+        ;;
+
+    configure)
+        log "Configuring freenas-proxmox (previous version: ${2:-none})"
+        CHANGED="no"
+
+        patch_file=$(find_patch "ZFSPlugin"     "$major" "$pve_mgr_minor" || true)
+        apply_patch "$ZFSPLUGIN_PATH"  "$patch_file" "ZFSPlugin.pm"    && CHANGED="yes"
+
+        patch_file=$(find_patch "pvemanagerlib" "$major" "$pve_mgr_minor" || true)
+        apply_patch "$PVEMANAGER_PATH" "$patch_file" "pvemanagerlib.js" && CHANGED="yes"
+
+        patch_file=$(find_patch "apidoc"        "$major" "$pve_mgr_minor" || true)
+        apply_patch "$APIDOC_PATH"     "$patch_file" "apidoc.js"       && CHANGED="yes"
+
+        install_files
+        CHANGED="yes"
+
+        [ "$CHANGED" = "yes" ] && restart_pve_services
+        exit 0
+        ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+
+    *)
+        echo "$0: called with unknown argument '$1'" >&2
+        exit 0
+        ;;
+
+esac
+
+exit 0

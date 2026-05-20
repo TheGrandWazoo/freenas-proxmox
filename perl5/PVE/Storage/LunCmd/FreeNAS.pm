@@ -2,6 +2,8 @@ package PVE::Storage::LunCmd::FreeNAS;
 
 use strict;
 use warnings;
+
+our $VERSION = '2.3.0';
 use Data::Dumper;
 use PVE::SafeSyslog;
 use IO::Socket::SSL;
@@ -14,14 +16,12 @@ use JSON;
 
 # Global variable definitions
 my $MAX_LUNS = 255;                        # Max LUNS per target on the iSCSI server
-my $freenas_server_list = undef;           # API connection HashRef using the IP address of the server
-my $freenas_rest_connection = undef;       # Pointer to entry in $freenas_server_list
-my $freenas_global_config_list = undef;    # IQN HashRef using the IP address of the server
+my $freenas_server_list = {};              # Per-host state: {client, product_name, api_version, dev_prefix, runaway_count}
+my $freenas_rest_connection = undef;       # REST::Client for the current active host
+my $freenas_global_config_list = {};       # Per-host iSCSI global config cache
 my $freenas_global_config = undef;         # Pointer to entry in $freenas_global_config_list
 my $dev_prefix = "";
 my $product_name = undef;
-my $apiping = '/api/v1.0/system/version/'; # Initial API method for setup
-my $runawayprevent = 0;                    # Recursion prevention variable
 
 # FreeNAS API definitions
 my $freenas_api_version = "v1.0";          # Default to v1.0 of the API's
@@ -165,7 +165,7 @@ sub run_lun_command {
     }
 
     syslog("error",(caller(0))[3] . " : unknown method $method");
-    return undef;
+    return;
 }
 
 #
@@ -237,7 +237,7 @@ sub run_list_extent {
     if (defined($luns->{$object})) {
         my $lu_object = $luns->{$object};
         $result = $lu_object->{$freenas_api_variables->{'extentnaa'}};
-        syslog("info",(caller(0))[3] . " '$object' wtih key '$freenas_api_variables->{'extentnaa'}' found with value: '$result'");
+        syslog("info",(caller(0))[3] . " '$object' with key '$freenas_api_variables->{'extentnaa'}' found with value: '$result'");
     } else {
         syslog("info",(caller(0))[3] . " '$object' with key '$freenas_api_variables->{'extentnaa'}' was not found");
     }
@@ -261,18 +261,29 @@ sub run_create_lu {
     my $target_id = freenas_get_targetid($scfg);
     die "Unable to find the target id for $scfg->{target}" if !defined($target_id);
 
-    # Create the extent
-    my $extent = freenas_iscsi_create_extent($scfg, $lun_path);
+    my ($extent_id, $link_id);
+    eval {
+        my $extent = freenas_iscsi_create_extent($scfg, $lun_path);
+        die "Unable to create extent for $lun_path" if !defined($extent);
+        $extent_id = $extent->{'id'};
 
-    # Associate the new extent to the target
-    my $link = freenas_iscsi_create_target_to_extent($scfg, $target_id, $extent->{'id'}, $lun_id);
+        my $link = freenas_iscsi_create_target_to_extent($scfg, $target_id, $extent_id, $lun_id);
+        die "Unable to link extent to target for $lun_path" if !defined($link);
+        $link_id = $link->{'id'};
 
-    if (defined($link)) {
-       syslog("info","FreeNAS::create_lu(lun_path=$lun_path, lun_id=$lun_id) : successful");
-    } else {
-       die "Unable to create lun $lun_path";
+        # Set FREENAS_TEST_ROLLBACK=1 in pvedaemon environment to exercise
+        # rollback without a real failure (#239)
+        die "TEST: forced rollback for #239 verification" if $ENV{FREENAS_TEST_ROLLBACK};
+    };
+    if (my $err = $@) {
+        syslog("err", (caller(0))[3] . " : rolling back after error for $lun_path: $err");
+        freenas_iscsi_remove_target_to_extent($scfg, $link_id)   if defined $link_id;
+        freenas_iscsi_remove_extent($scfg, $extent_id)           if defined $extent_id;
+        freenas_delete_zvol($scfg, $lun_path)                    if defined $extent_id;
+        die "Unable to create lun $lun_path (rolled back): $err";
     }
 
+    syslog("info", (caller(0))[3] . "(lun_path=$lun_path, lun_id=$lun_id) : successful");
     return "";
 }
 
@@ -321,6 +332,12 @@ sub run_delete_lu {
     # Remove the link
     my $remove_link = freenas_iscsi_remove_target_to_extent($scfg, $link->{'id'});
 
+    # NOTE: zvol deletion is intentionally left to ZFSPlugin's SSH path (zfs_delete_zvol).
+    # Deleting it here caused a double-delete: SSH would fail, ZFSPlugin's error recovery
+    # would call run_create_lu on a missing zvol, producing a false "Unable to create lun"
+    # error in the task log (#240). freenas_delete_zvol belongs only in run_create_lu's
+    # rollback path (#239).
+
     if($remove_link == 1 && $remove_extent == 1) {
         syslog("info", (caller(0))[3] . "(lun_path=$lun_path) : successful");
     } else {
@@ -332,63 +349,75 @@ sub run_delete_lu {
 
 
 sub freenas_api_connect {
-    my ($scfg) = @_;
+    my ($scfg, $ping) = @_;
+    $ping //= '/api/v1.0/system/version/';
 
     syslog("info", (caller(0))[3] . " : called");
 
-    my $scheme = $scfg->{freenas_use_ssl} ? "https" : "http";
+    my $scheme  = $scfg->{freenas_use_ssl} ? "https" : "http";
     my $apihost = defined($scfg->{freenas_apiv4_host}) ? $scfg->{freenas_apiv4_host} : $scfg->{portal};
 
-    if (! defined $freenas_server_list->{$apihost}) {
-        $freenas_server_list->{$apihost} = REST::Client->new();
+    if (!defined $freenas_server_list->{$apihost} || !defined $freenas_server_list->{$apihost}{client}) {
+        $freenas_server_list->{$apihost} = {
+            client        => REST::Client->new(),
+            product_name  => undef,
+            api_version   => 'v1.0',
+            dev_prefix    => '',
+            runaway_count => 0,
+        };
     }
-    $freenas_server_list->{$apihost}->setHost($scheme . '://' . $apihost);
-    $freenas_server_list->{$apihost}->addHeader('Content-Type', 'application/json');
-    if (defined($scfg->{'truenas_token_auth'})) {
+    my $host = $freenas_server_list->{$apihost};
+    $host->{client}->setHost($scheme . '://' . $apihost);
+    $host->{client}->addHeader('Content-Type', 'application/json');
+    if (defined($scfg->{'truenas_token_auth'}) && $scfg->{'truenas_token_auth'}) {
         syslog("info", (caller(0))[3] . " : Authentication using Bearer Token Auth");
-        $freenas_server_list->{$apihost}->addHeader('Authorization', 'Bearer ' . $scfg->{truenas_secret});
+        if (!$scfg->{freenas_use_ssl}) {
+            syslog("warn", (caller(0))[3] . " : Bearer Token used without SSL — TrueNAS 25.04+ revokes API keys sent over plain HTTP; enable 'Use SSL' in storage config");
+        }
+        $host->{client}->addHeader('Authorization', 'Bearer ' . $scfg->{truenas_secret});
     } else {
         syslog("info", (caller(0))[3] . " : Authentication using Basic Auth");
-        $freenas_server_list->{$apihost}->addHeader('Authorization', 'Basic ' . encode_base64($scfg->{freenas_user} . ':' . $scfg->{freenas_password}));
+        $host->{client}->addHeader('Authorization', 'Basic ' . encode_base64($scfg->{freenas_user} . ':' . $scfg->{freenas_password}));
     }
     # If using SSL, don't verify SSL certs
     if ($scfg->{freenas_use_ssl}) {
-        $freenas_server_list->{$apihost}->getUseragent()->ssl_opts(verify_hostname => 0);
-        $freenas_server_list->{$apihost}->getUseragent()->ssl_opts(SSL_verify_mode => SSL_VERIFY_NONE);
+        $host->{client}->getUseragent()->ssl_opts(verify_hostname => 0);
+        $host->{client}->getUseragent()->ssl_opts(SSL_verify_mode => SSL_VERIFY_NONE);
     }
-    # Check if the APIs are accessable via the selected host and scheme
-    my $api_response = $freenas_server_list->{$apihost}->request('GET', $apiping);
+    # Check if the APIs are accessible via the selected host and scheme
+    my $api_response = $host->{client}->request('GET', $ping);
     my $code = $api_response->responseCode();
     my $type = $api_response->responseHeader('Content-Type');
     syslog("info", (caller(0))[3] . " : REST connection header Content-Type:'" . $type . "'");
 
     # Make sure we are not recursion calling.
-    if ($runawayprevent > 2) {
-        freenas_api_log_error($freenas_server_list->{$apihost});
+    if ($host->{runaway_count} > 2) {
+        freenas_api_log_error($host->{client});
         die "Loop recursion prevention";
     # Successful connection
     } elsif ($code == 200 && ($type =~ /^text\/plain/ || $type =~ /^application\/json/)) {
         syslog("info", (caller(0))[3] . " : REST connection successful to '" . $apihost . "' using the '" . $scheme . "' protocol");
-        $runawayprevent = 0;
-    # A 302 or 200 (We already check for the correct 'type' above with a 200 so why add additional conditionals).
-    # So change to v2.0 APIs.
-    } elsif ($code == 302 || $code == 200) {
-        syslog("info", (caller(0))[3] . " : Changing to v2.0 API's");
-        $runawayprevent++;
-        $apiping =~ s/v1\.0/v2\.0/;
-        freenas_api_connect($scfg);
-    # A 307 from FreeNAS means rediect http to https.
+        $host->{runaway_count} = 0;
+    # A 302 or 200 (wrong content-type) means v1.0 is redirecting — upgrade to v2.0.
+    # TrueNAS 25.04+ removed v1.0 entirely and returns 404 instead of 302; treat
+    # that the same way so long as we are still probing the v1.0 endpoint.
+    } elsif ($code == 302 || $code == 200 || ($code == 404 && $ping =~ /v1\.0/)) {
+        syslog("info", (caller(0))[3] . " : v1.0 API unavailable (HTTP $code) — upgrading to v2.0");
+        $host->{runaway_count}++;
+        $ping =~ s/v1\.0/v2\.0/;
+        freenas_api_connect($scfg, $ping);
+    # A 307 from FreeNAS means redirect http to https.
     } elsif ($code == 307) {
         syslog("info", (caller(0))[3] . " : Redirecting to HTTPS protocol");
-        $runawayprevent++;
+        $host->{runaway_count}++;
         $scfg->{freenas_use_ssl} = 1;
-        freenas_api_connect($scfg);
+        freenas_api_connect($scfg, $ping);
     # For now, any other code we fail.
     } else {
-        freenas_api_log_error($freenas_server_list->{$apihost});
+        freenas_api_log_error($host->{client});
         die "Unable to connect to the FreeNAS API service at '" . $apihost . "' using the '" . $scheme . "' protocol";
     }
-    $freenas_rest_connection = $freenas_server_list->{$apihost};
+    $freenas_rest_connection = $host->{client};
     return;
 }
 
@@ -403,16 +432,9 @@ sub freenas_api_check {
 
     syslog("info", (caller(0))[3] . " : called");
 
-    if (! defined $freenas_rest_connection->{$apihost}) {
+    if (!defined $freenas_server_list->{$apihost}{client}) {
         freenas_api_connect($scfg);
-        eval {
-            $result = decode_json($freenas_rest_connection->responseContent());
-        };
-        if ($@) {
-            $result = $freenas_rest_connection->responseContent();
-        } else {
-            $result = $freenas_rest_connection->responseContent();
-        }
+        $result = $freenas_rest_connection->responseContent();
         $result =~ s/"//g;
         syslog("info", (caller(0))[3] . " : successful : Server version: " . $result);
         if ($result =~ /^(TrueNAS|FreeNAS)-(\d+)\.(\d+)\-U(\d+)(?(?=\.)\.(\d+))$/) {
@@ -439,6 +461,10 @@ sub freenas_api_check {
         if ($truenas_release_type ne "Production") {
             syslog("warn", (caller(0))[3] . " : The '" . $product_name . "' release type of '" . $truenas_release_type . "' may not worked due to unsupported changes.");
         }
+        # Save per-host metadata so subsequent calls restore state correctly
+        $freenas_server_list->{$apihost}{product_name} = $product_name;
+        $freenas_server_list->{$apihost}{api_version}  = $freenas_api_version;
+        $freenas_server_list->{$apihost}{dev_prefix}   = $dev_prefix;
     } else {
         syslog("info", (caller(0))[3] . " : REST Client already initialized");
     }
@@ -460,16 +486,21 @@ sub freenas_api_call {
     syslog("info", (caller(0))[3] . " : called for host '" . $apihost . "'");
 
     $method = uc($method);
-    if (! $method =~ /^(?>GET|DELETE|POST)$/) {
+    if ($method !~ /^(?:GET|DELETE|POST)$/) {
         syslog("info", (caller(0))[3] . " : Invalid HTTP RESTful service method '$method'");
         die "Invalid HTTP RESTful service method '$method' used.";
     }
 
-    if (! defined $freenas_server_list->{$apihost}) {
+    if (!defined $freenas_server_list->{$apihost}{client}) {
         freenas_api_check($scfg);
     }
-    $freenas_rest_connection = $freenas_server_list->{$apihost};
-    $freenas_global_config = $freenas_global_config_list->{$apihost};
+    my $host = $freenas_server_list->{$apihost};
+    $freenas_rest_connection = $host->{client};
+    $freenas_global_config   = $freenas_global_config_list->{$apihost};
+    $product_name            = $host->{product_name};
+    $dev_prefix              = $host->{dev_prefix};
+    $freenas_api_methods     = $freenas_api_version_matrix->{$host->{api_version}}{methods};
+    $freenas_api_variables   = $freenas_api_version_matrix->{$host->{api_version}}{variables};
     my $json_data = (defined $data) ? encode_json($data) : undef;
     $freenas_rest_connection->request($method, $path, $json_data);
     syslog("info", (caller(0))[3] . " : successful");
@@ -503,7 +534,7 @@ sub freenas_iscsi_get_globalconfiguration {
         return $result;
     } else {
         freenas_api_log_error();
-        return undef;
+        return;
     }
 }
 
@@ -524,7 +555,7 @@ sub freenas_iscsi_get_extent {
         return $result;
     } else {
         freenas_api_log_error();
-        return undef;
+        return;
     }
 }
 
@@ -555,9 +586,10 @@ sub freenas_iscsi_create_extent {
     my $device = $lun_path;
     $device =~ s/^\/dev\///; # strip /dev/
 
+    my %extent_vars = ('$name' => $name, '$device' => $device);
     my $post_body = {};
     while ((my $key, my $value) = each %{$freenas_api_methods->{'extent'}->{'post_body'}}) {
-        $post_body->{$key} = ($value =~ /^\$.+$/) ? eval $value : $value;
+        $post_body->{$key} = exists $extent_vars{$value} ? $extent_vars{$value} : $value;
     }
 
     freenas_api_call($scfg, 'POST', $freenas_api_methods->{'extent'}->{'resource'}, $post_body);
@@ -568,7 +600,41 @@ sub freenas_iscsi_create_extent {
         return $result;
     } else {
         freenas_api_log_error();
-        return undef;
+        return;
+    }
+}
+
+#
+# Explicitly delete the underlying ZFS zvol via the pool/dataset API.
+# The extent DELETE with remove:true is unreliable on TrueNAS SCALE 24.10+
+# (extent config is removed but the zvol is left behind).  This function
+# is a belt-and-suspenders call after every extent removal.
+# Only runs on v2.0; v1.0 hosts are expected to handle it via remove:true.
+# Parameters:
+#    - scfg
+#    - lun_path  (either /dev/zvol/tank/... or zvol/tank/... form)
+#
+sub freenas_delete_zvol {
+    my ($scfg, $lun_path) = @_;
+
+    my $apihost    = defined($scfg->{freenas_apiv4_host}) ? $scfg->{freenas_apiv4_host} : $scfg->{portal};
+    my $api_version = ($freenas_server_list->{$apihost}{api_version} // $freenas_api_version) // '';
+    return 1 unless $api_version eq 'v2.0';
+
+    my $dataset = $lun_path;
+    $dataset =~ s{^/dev/zvol/}{};   # strip /dev/zvol/ prefix (run_create_lu form)
+    $dataset =~ s{^zvol/}{};        # strip zvol/ prefix (run_delete_lu form after $dev_prefix strip)
+    $dataset =~ s{/}{%2F}g;         # URL-encode path separators for REST endpoint
+
+    syslog("info", (caller(0))[3] . " : explicitly deleting zvol dataset '$dataset'");
+    freenas_api_call($scfg, 'DELETE', "/api/v2.0/pool/dataset/id/$dataset/", {"recursive" => \0});
+    my $code = $freenas_rest_connection->responseCode();
+    if ($code == 200 || $code == 204) {
+        syslog("info", (caller(0))[3] . " : zvol '$dataset' deleted successfully");
+        return 1;
+    } else {
+        syslog("err", (caller(0))[3] . " : WARNING: could not delete zvol '$dataset' (HTTP $code) — manual cleanup may be needed");
+        return 0;
     }
 }
 
@@ -611,7 +677,7 @@ sub freenas_iscsi_get_target {
         return $result;
     } else {
         freenas_api_log_error();
-        return undef;
+        return;
     }
 }
 
@@ -641,7 +707,7 @@ sub freenas_iscsi_get_target_to_extent {
         return $result;
     } else {
         freenas_api_log_error();
-        return undef;
+        return;
     }
 }
 
@@ -659,9 +725,10 @@ sub freenas_iscsi_create_target_to_extent {
 
     syslog("info", (caller(0))[3] . " : called with (target_id=$target_id, extent_id=$extent_id, lun_id=$lun_id)");
 
+    my %tte_vars = ('$target_id' => $target_id, '$extent_id' => $extent_id, '$lun_id' => $lun_id);
     my $post_body = {};
     while ((my $key, my $value) = each %{$freenas_api_methods->{'targetextent'}->{'post_body'}}) {
-        $post_body->{$key} = ($value =~ /^\$.+$/) ? eval $value : $value;
+        $post_body->{$key} = exists $tte_vars{$value} ? $tte_vars{$value} : $value;
     }
 
     freenas_api_call($scfg, 'POST', $freenas_api_methods->{'targetextent'}->{'resource'}, $post_body);
@@ -672,7 +739,7 @@ sub freenas_iscsi_create_target_to_extent {
         return $result;
     } else {
         freenas_api_log_error();
-        return undef;
+        return;
     }
 }
 
