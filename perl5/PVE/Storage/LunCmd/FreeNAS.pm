@@ -3,7 +3,7 @@ package PVE::Storage::LunCmd::FreeNAS;
 use strict;
 use warnings;
 
-our $VERSION = '2.3.0';
+our $VERSION = '2.4.0';
 use Data::Dumper;
 use PVE::SafeSyslog;
 use IO::Socket::SSL;
@@ -636,6 +636,43 @@ sub freenas_delete_zvol {
         syslog("err", (caller(0))[3] . " : WARNING: could not delete zvol '$dataset' (HTTP $code) — manual cleanup may be needed");
         return 0;
     }
+}
+
+# Parse a blocksize string (e.g. "8k", "16k", "8192") to bytes.
+sub freenas_parse_blocksize {
+    my ($val) = @_;
+    return 0 unless defined $val && $val ne '';
+    return $1 * 1024        if $val =~ /^(\d+)\s*[kK]$/;
+    return $1 * 1024 * 1024 if $val =~ /^(\d+)\s*[mM]$/;
+    return $val + 0;
+}
+
+# Returns the recommended ZFS volblocksize for this TrueNAS host based on its
+# product type.  TrueNAS SCALE ships a newer ZFS that requires >= 16k; CORE is
+# fine with 8k.  Returns undef if the API is unreachable so callers can fall
+# back to the user-configured value or the ZFS default.
+sub freenas_get_recommended_blocksize {
+    my ($scfg) = @_;
+
+    my $apihost = defined($scfg->{freenas_apiv4_host}) ? $scfg->{freenas_apiv4_host} : $scfg->{portal};
+
+    # freenas_api_check (not freenas_api_connect) must be used here because
+    # product_name is only parsed and cached by freenas_api_check.
+    # freenas_api_connect only sets up the HTTP client.
+    eval { freenas_api_check($scfg) };
+    if ($@) {
+        syslog("warn", (caller(0))[3] . " : unable to connect to TrueNAS API for blocksize detection: $@");
+        return undef;
+    }
+
+    my $product = $freenas_server_list->{$apihost}{product_name} // '';
+    if ($product =~ /SCALE/i) {
+        syslog("info", (caller(0))[3] . " : detected TrueNAS SCALE — recommending blocksize 16384");
+        return 16384;
+    }
+
+    syslog("info", (caller(0))[3] . " : detected '$product' — recommending blocksize 8192");
+    return 8192;
 }
 
 #
