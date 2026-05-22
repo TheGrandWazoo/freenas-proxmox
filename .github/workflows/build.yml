@@ -69,6 +69,13 @@ jobs:
             < stable-8/perl5/PVE/Storage/ZFSPlugin.pm.patch \
             && echo "ZFSPlugin PVE-8 patch: OK"
 
+      - name: "Dry-run patch: ZFSPlugin (PVE 8.4.x)"
+        run: |
+          patch --dry-run --ignore-whitespace \
+            stable-8/perl5/PVE/Storage/ZFSPlugin-8.4.14_1.pm.orig \
+            < stable-8/perl5/PVE/Storage/ZFSPlugin-8.4.14_1.pm.patch \
+            && echo "ZFSPlugin PVE-8.4 patch: OK"
+
       - name: "Dry-run patch: apidoc.js (PVE 8)"
         run: |
           patch --dry-run --ignore-whitespace \
