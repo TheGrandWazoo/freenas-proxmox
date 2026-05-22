@@ -1,5 +1,5 @@
---- ZFSPlugin.pm.orig	2023-12-31 09:56:18.895228853 -0500
-+++ ZFSPlugin.pm	2023-12-31 09:57:08.830488875 -0500
+--- /mnt/c/Users/Kevin/eclipse-workspace/freenas-proxmox/stable-8/perl5/PVE/Storage/ZFSPlugin.pm.orig	2026-05-20 12:28:37.312211300 -0400
++++ /tmp/ZFSPlugin-8x-work.pm	2026-05-22 08:57:21.728470343 -0400
 @@ -10,6 +10,7 @@
  
  use base qw(PVE::Storage::ZFSPoolPlugin);
@@ -45,16 +45,16 @@
 @@ -157,7 +163,7 @@
  sub zfs_get_lun_number {
      my ($class, $scfg, $guid) = @_;
-
+ 
 -    die "could not find lun_number for guid $guid" if !$guid;
 +    die "could not find lun_number for guid $guid" if !defined $guid;
-
+ 
      if ($class->zfs_request($scfg, undef, 'list_view', $guid) =~ /^(\d+)$/) {
  	return $1;
 @@ -166,6 +172,15 @@
      die "lun_number for guid $guid is not a number";
  }
-
+ 
 +# Part of the multipath enhancement
 +sub zfs_get_wwid_number {
 +    my ($class, $scfg, $guid) = @_;
@@ -164,3 +164,38 @@
      return ($path, $vmid, $vtype);
  }
  
+@@ -299,7 +380,33 @@
+     my $volname = $name;
+ 
+     $volname = $class->find_free_diskname($storeid, $scfg, $vmid, $fmt) if !$volname;
+-    
++
++    # Auto-detect ZFS blocksize from TrueNAS API and override if wrong.
++    # SCALE requires >= 16k; CORE works with 8k. If the configured blocksize is
++    # less than recommended (or unset), correct it now and persist to storage.cfg.
++    if ( eq 'freenas') {
++        eval {
++            my  = PVE::Storage::LunCmd::FreeNAS::freenas_get_recommended_blocksize(HASH(0x6158b91f5240));
++            if (defined ) {
++                my  = PVE::Storage::LunCmd::FreeNAS::freenas_parse_blocksize();
++                if (! ||  < ) {
++                    warn "freenas-proxmox: blocksize " . ( ?  : 'unset') . " < recommended  -- correcting storage ''\n";
++                     = ;
++                    eval {
++                        require PVE::Storage;
++                        PVE::Storage::lock_storage_config(sub {
++                            my HASH(0x6158b91f52a0) = PVE::Storage::config();
++                             =  if HASH(0x6158b91f5420);
++                            PVE::Storage::write_config(HASH(0x6158b91f52a0));
++                        });
++                    };
++                    warn "freenas-proxmox: could not persist blocksize to storage config: \n" if ;
++                }
++            }
++        };
++        warn "TrueNAS blocksize detection failed: " if ;
++    }
++
+     $class->zfs_create_zvol($scfg, $volname, $size);
+  
+     my $guid = $class->zfs_create_lu($scfg, $volname);

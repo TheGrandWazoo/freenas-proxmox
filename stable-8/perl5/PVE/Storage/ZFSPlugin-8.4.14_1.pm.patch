@@ -1,5 +1,5 @@
---- /tmp/ZFSPlugin-8.4.19-stock.pm	2026-05-19 23:09:15.498561777 -0400
-+++ /tmp/ZFSPlugin-8.4.19-patched.pm	2026-05-19 23:13:40.830560931 -0400
+--- /tmp/ZFSPlugin-8.4.orig	2026-05-22 08:54:24.992472212 -0400
++++ /tmp/ZFSPlugin-8.4-final.pm	2026-05-22 08:51:00.460468461 -0400
 @@ -11,6 +11,7 @@
  
  use base qw(PVE::Storage::ZFSPoolPlugin);
@@ -8,7 +8,7 @@
  use PVE::Storage::LunCmd::Istgt;
  use PVE::Storage::LunCmd::Iet;
  use PVE::Storage::LunCmd::LIO;
-@@ -26,6 +27,7 @@
+@@ -26,13 +27,14 @@
      modify_lu => 1,
      add_view => 1,
      list_view => 1,
@@ -16,6 +16,14 @@
      list_lu => 1,
  };
  
+ my $zfs_unknown_scsi_provider = sub {
+     my ($provider) = @_;
+ 
+-    die "$provider: unknown iscsi provider. Available [comstar, istgt, iet, LIO]";
++    die "$provider: unknown iscsi provider. Available [comstar, freenas, istgt, iet, LIO]";
+ };
+ 
+ my $zfs_get_base = sub {
 @@ -44,6 +46,8 @@
          return PVE::Storage::LunCmd::Istgt::get_base($scfg);
      } elsif ($scfg->{iscsiprovider} eq 'iet') {
@@ -104,3 +112,58 @@
          sparse => { optional => 1 },
          comstar_hg => { optional => 1 },
          comstar_tg => { optional => 1 },
+@@ -243,6 +289,21 @@
+         my $base_path;
+         if ($scfg->{iscsiprovider} eq 'comstar') {
+             $base_path = PVE::Storage::LunCmd::Comstar::get_base($scfg);
++        } elsif ($scfg->{iscsiprovider} eq 'freenas') {
++            $base_path = PVE::Storage::LunCmd::FreeNAS::get_base($scfg);
++            # Auto-detect and persist correct blocksize at storage creation time.
++            # $scfg is the live config ref -- write_config() saves it after this hook returns.
++            eval {
++                my $recommended = PVE::Storage::LunCmd::FreeNAS::freenas_get_recommended_blocksize($scfg);
++                if (defined $recommended) {
++                    my $configured = PVE::Storage::LunCmd::FreeNAS::freenas_parse_blocksize($scfg->{blocksize});
++                    if (!$configured || $configured < $recommended) {
++                        warn "freenas-proxmox: auto-correcting blocksize from " . ($configured ? $configured : 'unset') . " to $recommended for '$storeid'\n";
++                        $scfg->{blocksize} = $recommended;
++                    }
++                }
++            };
++            warn "freenas-proxmox: blocksize detection in on_add_hook failed: $@\n" if $@;
+         } elsif ($scfg->{iscsiprovider} eq 'istgt') {
+             $base_path = PVE::Storage::LunCmd::Istgt::get_base($scfg);
+         } elsif ($scfg->{iscsiprovider} eq 'iet' || $scfg->{iscsiprovider} eq 'LIO') {
+@@ -349,6 +410,32 @@
+ 
+     $volname = $class->find_free_diskname($storeid, $scfg, $vmid, $fmt) if !$volname;
+ 
++    # Auto-detect ZFS blocksize from TrueNAS API and override if wrong.
++    # SCALE requires >= 16k; CORE works with 8k. If the configured blocksize is
++    # less than recommended (or unset), correct it now and persist to storage.cfg.
++    if ($scfg->{iscsiprovider} eq 'freenas') {
++        eval {
++            my $recommended = PVE::Storage::LunCmd::FreeNAS::freenas_get_recommended_blocksize($scfg);
++            if (defined $recommended) {
++                my $configured = PVE::Storage::LunCmd::FreeNAS::freenas_parse_blocksize($scfg->{blocksize});
++                if (!$configured || $configured < $recommended) {
++                    warn "freenas-proxmox: blocksize " . ($configured ? $configured : 'unset') . " < recommended $recommended -- correcting storage '$storeid'\n";
++                    $scfg->{blocksize} = $recommended;
++                    eval {
++                        require PVE::Storage;
++                        PVE::Storage::lock_storage_config(sub {
++                            my $cfg = PVE::Storage::config();
++                            $cfg->{ids}{$storeid}{blocksize} = $recommended if $cfg->{ids}{$storeid};
++                            PVE::Storage::write_config($cfg);
++                        });
++                    };
++                    warn "freenas-proxmox: could not persist blocksize to storage config: $@\n" if $@;
++                }
++            }
++        };
++        warn "TrueNAS blocksize detection failed: $@" if $@;
++    }
++
+     $class->zfs_create_zvol($scfg, $volname, $size);
+ 
+     my $guid = $class->zfs_create_lu($scfg, $volname);
