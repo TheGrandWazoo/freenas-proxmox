@@ -662,7 +662,7 @@ sub freenas_get_recommended_blocksize {
     eval { freenas_api_check($scfg) };
     if ($@) {
         syslog("warn", (caller(0))[3] . " : unable to connect to TrueNAS API for blocksize detection: $@");
-        return undef;
+        return;
     }
 
     my $product = $freenas_server_list->{$apihost}{product_name} // '';
