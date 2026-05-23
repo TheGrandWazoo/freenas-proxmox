@@ -376,7 +376,7 @@ sub freenas_api_connect {
         }
         $host->{client}->addHeader('Authorization', 'Bearer ' . $scfg->{truenas_secret});
     } else {
-        syslog("info", (caller(0))[3] . " : Authentication using Basic Auth");
+        syslog("warn", (caller(0))[3] . " : Authentication using Basic Auth (username/password) -- DEPRECATED. Generate an API key in TrueNAS and switch to token auth. Basic auth will be removed in v3.0.0.");
         $host->{client}->addHeader('Authorization', 'Basic ' . encode_base64($scfg->{freenas_user} . ':' . $scfg->{freenas_password}));
     }
     # If using SSL, don't verify SSL certs
