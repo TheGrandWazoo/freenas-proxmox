@@ -85,7 +85,7 @@ Before installing, ensure the following are in place on your **Proxmox VE node**
 
 3. On **TrueNAS SCALE** or **TrueNAS CORE 13+**, generate an API key:
    - TrueNAS SCALE: *System Settings → API Keys → Add*
-   - TrueNAS CORE: *System → API Keys → Add*
+   - TrueNAS CORE 13: *gear icon (top-right) → API Keys → Add*
    
    Copy the key — you will need it during storage configuration in Proxmox.
 
