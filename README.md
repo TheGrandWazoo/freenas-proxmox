@@ -229,9 +229,24 @@ Common causes:
 
 ### "volblocksize is less than the default minimum block size" warning on disk creation
 
-This warning appears on TrueNAS SCALE when the storage is configured with a blocksize below 16k. The disk is created successfully — the warning is cosmetic but indicates suboptimal storage efficiency.
+This warning appears on TrueNAS SCALE when a zvol is created with a blocksize below 16k.
 
-**Fix:** see [ZFS Block Size](#zfs-block-size) in the Configuration section above. Change the blocksize for your SCALE storage entry from 8k to 16k.
+**v2.4.0 and later:** the plugin automatically detects the correct blocksize from the TrueNAS API and corrects it. If you see a line like `freenas-proxmox: blocksize 8192 < recommended 16384 -- correcting storage '...'` in the task log, the correction was applied and the disk was created correctly. The storage config is also updated automatically so subsequent disk creations will be silent.
+
+**v2.3.x and earlier:** see [ZFS Block Size](#zfs-block-size) — manually set the blocksize to `16k` for SCALE storages.
+
+### API key stops working after upgrading TrueNAS SCALE to 25.04
+
+TrueNAS SCALE 25.04 **revokes all existing API keys** that were created with whitelisted methods during the upgrade. If you are using `truenas_token_auth` and your storage shows as unavailable after a SCALE 25.04 upgrade, your API key was revoked.
+
+**Fix:**
+1. Log into the TrueNAS SCALE web UI
+2. Go to **Credentials → API Keys** and generate a new API key
+3. In Proxmox, edit the affected storage (**Datacenter → Storage → Edit**) and paste the new key into the **API Secret / Token** field
+
+**Additionally**, TrueNAS SCALE 25.04 enforces HTTPS for API key authentication — keys transmitted over plain HTTP are automatically revoked. Ensure **Use SSL** is enabled in your Proxmox storage config when using token auth.
+
+> **Note:** TrueNAS SCALE 25.04 also deprecates the REST API used by this plugin (v2.x). Full removal is planned for SCALE 26.x. Plugin v3.0.0 will add WebSocket JSON-RPC 2.0 support. See [issue #243](https://github.com/TheGrandWazoo/freenas-proxmox/issues/243).
 
 ### Dangling extents on TrueNAS after a failed operation
 
