@@ -442,8 +442,9 @@ sub _running_vms_on_storage {
         my $pidfile = "/var/run/qemu-server/$vmid.pid";
         next unless -f $pidfile;
         open(my $pf, '<', $pidfile) or next;
-        my $pid = <$pf>; chomp $pid;
+        my $pidraw = <$pf>;
         close($pf);
+        my ($pid) = ($pidraw // '') =~ /^(\d+)/;  # untaint for taint-mode Perl
         next unless $pid && kill(0, $pid);
         # VM is running — check if it uses this storage
         open(my $cf, '<', "$cfgdir/$f") or next;
