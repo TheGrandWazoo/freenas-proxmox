@@ -248,6 +248,28 @@ TrueNAS SCALE 25.04 **revokes all existing API keys** that were created with whi
 
 > **Note:** TrueNAS SCALE 25.04 also deprecates the REST API used by this plugin (v2.x). Full removal is planned for SCALE 26.x. Plugin v3.0.0 will add WebSocket JSON-RPC 2.0 support. See [issue #243](https://github.com/TheGrandWazoo/freenas-proxmox/issues/243).
 
+### Disk size in Proxmox shows larger than what I entered
+
+This is expected. Proxmox creates disks in **GiB** (gibibytes, base-2) but displays them in **GB** (gigabytes, base-10) in some views.
+
+| Unit | Base | 1 unit = |
+|------|------|----------|
+| GiB (gibibyte) | 2¹⁰ = 1024 | 1,073,741,824 bytes |
+| GB (gigabyte) | 10³ = 1000 | 1,000,000,000 bytes |
+
+When you enter **80 GiB** in the Proxmox disk creation dialog, the zvol is created as exactly 85,899,345,920 bytes. TrueNAS reports that in decimal: **85.90 GB**. The disk inside the VM is still exactly 80 GiB — nothing is lost or added.
+
+A quick reference:
+
+| Entered in Proxmox | TrueNAS / decimal display |
+|--------------------|---------------------------|
+| 10 GiB | 10.74 GB |
+| 32 GiB | 34.36 GB |
+| 80 GiB | 85.90 GB |
+| 100 GiB | 107.37 GB |
+| 500 GiB | 536.87 GB |
+| 1 TiB | 1,099.51 GB (≈ 1.10 TB) |
+
 ### Dangling extents on TrueNAS after a failed operation
 
 If you see iSCSI extents in TrueNAS that are not associated with any target, they can be safely deleted from the TrueNAS UI. v2.3.0 and later automatically roll back and clean up after a failed LUN creation.
