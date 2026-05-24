@@ -1,11 +1,14 @@
 #!/bin/bash
 # postinst: freenas-proxmox v3.x install/upgrade script
-# Installs the TrueNAS custom storage plugin for Proxmox VE.
-# No patches, no internet access required.
+# Installs the TrueNAS custom storage plugin and UI panel for Proxmox VE.
+# No patches to PVE core files — only adds our own files and one <script> line.
 set -e
 
-PLUGIN_SRC="/usr/share/freenas-proxmox/TrueNAS.pm"
+INSTALL_DIR="/usr/share/freenas-proxmox"
 PLUGIN_DST="/usr/share/perl5/PVE/Storage/Custom/TrueNAS.pm"
+JS_DST="/usr/share/pve-manager/js/truenas-storage.js"
+TPL="/usr/share/pve-manager/index.html.tpl"
+SCRIPT_TAG='    <script type="text/javascript" src="/pve2/js/truenas-storage.js?ver=[% version %]"></script>'
 LOG_FILE="/var/log/freenas-proxmox-install.log"
 
 log() {
@@ -15,21 +18,34 @@ log() {
 install_plugin() {
     log "Installing ${PLUGIN_DST}"
     mkdir -p "$(dirname "$PLUGIN_DST")"
-    cp "$PLUGIN_SRC" "$PLUGIN_DST"
-    log "Plugin installed"
+    cp "${INSTALL_DIR}/TrueNAS.pm" "$PLUGIN_DST"
+}
+
+install_ui() {
+    log "Installing ${JS_DST}"
+    cp "${INSTALL_DIR}/truenas-storage.js" "$JS_DST"
+
+    if grep -qF 'truenas-storage.js' "$TPL" 2>/dev/null; then
+        log "index.html.tpl already has truenas-storage.js — skipping"
+        return 0
+    fi
+
+    log "Adding <script> tag to ${TPL}"
+    sed -i "/pvemanagerlib\.js/a\\${SCRIPT_TAG}" "$TPL"
 }
 
 restart_pve_services() {
     log "Restarting Proxmox VE services ..."
     pvedaemon restart && log "pvedaemon restarted"
     pveproxy restart  && log "pveproxy restarted"
-    log "Done. Refresh your Proxmox browser tab to load the updated UI."
+    log "Done. Refresh your Proxmox browser tab."
 }
 
 case "$1" in
     configure)
         log "Configuring freenas-proxmox (previous version: ${2:-none})"
         install_plugin
+        install_ui
         restart_pve_services
         ;;
     abort-upgrade|abort-remove|abort-deconfigure)
