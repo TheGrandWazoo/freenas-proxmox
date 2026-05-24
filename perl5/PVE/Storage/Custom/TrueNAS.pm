@@ -436,26 +436,12 @@ sub free_image {
     my $ext = _find_extent($scfg, $volname);
 
     if ($ext) {
-        my $target = _resolve_target($scfg);
-        my $portal = _portal($scfg);
-        my $iqn    = $target->{iqn};
-
-        # Log out any active initiator session for this target before we touch TrueNAS.
-        my $sessions = '';
-        eval { run_command(['iscsiadm', '-m', 'session'],
-                           outfunc => sub { $sessions .= shift . "\n" },
-                           noerr   => 1) };
-        for my $sid ($sessions =~ /\[(\d+)\][^\n]*\Q$iqn\E/g) {
-            _log('info', "free_image: logging out iSCSI session $sid");
-            eval { run_command(['iscsiadm', '-m', 'session', '-r', $sid, '--logout'],
-                               noerr => 1) };
-        }
-
         # Delete the extent with force=true.  The v2.0 API cascades targetextent
         # deletion automatically — explicit targetextent DELETE is not needed and
-        # would fail with 422 "target in use" if any session is still active.
-        # If force is not enough (CORE 13 is strict about active sessions), restart
-        # the TrueNAS iSCSI service to purge server-side state and retry.
+        # would 422 "target in use" if attempted while a session is active.
+        # No initiator logout required: force=true is handled server-side by TrueNAS.
+        # If force alone fails (CORE 13 strict enforcement), restart the iSCSI
+        # service to purge server-side session state and retry.
         my $deleted = 0;
         eval { _api($scfg, 'DELETE', "/iscsi/extent/id/$ext->{extent_id}",
                     { force => JSON::true }) };
@@ -474,14 +460,6 @@ sub free_image {
         }
         die "free_image: could not delete extent $ext->{extent_id} after retries\n"
             unless $deleted;
-
-        # Restore the session so remaining LUNs stay accessible
-        _log('info', "free_image: restoring iSCSI session");
-        eval { run_command(['iscsiadm', '-m', 'discovery', '-t', 'sendtargets',
-                            '-p', "$portal:3260"], noerr => 1) };
-        eval { run_command(['iscsiadm', '-m', 'node', '-T', $iqn,
-                            '-p', "$portal:3260", '--login'], noerr => 1) };
-        eval { run_command(['iscsiadm', '-m', 'session', '--rescan'], noerr => 1) };
     } else {
         _log('warning', "free_image: no iSCSI extent found for $volname — skipping extent removal");
     }
