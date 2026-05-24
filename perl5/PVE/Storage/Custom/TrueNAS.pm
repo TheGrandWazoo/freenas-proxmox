@@ -436,23 +436,28 @@ sub free_image {
     my $ext = _find_extent($scfg, $volname);
 
     if ($ext) {
-        # Delete the extent with force=true.  The v2.0 API cascades targetextent
-        # deletion automatically — explicit targetextent DELETE is not needed and
-        # would 422 "target in use" if attempted while a session is active.
-        # No initiator logout required: force=true is handled server-side by TrueNAS.
-        # If force alone fails (CORE 13 strict enforcement), restart the iSCSI
-        # service to purge server-side session state and retry.
+        # Fast path: DELETE extent with force=true — TrueNAS v2.0 API cascades
+        # the targetextent association automatically on success.
         my $deleted = 0;
         eval { _api($scfg, 'DELETE', "/iscsi/extent/id/$ext->{extent_id}",
                     { force => JSON::true }) };
         if (!$@) {
             $deleted = 1;
-        } else {
-            _log('warning', "free_image: extent delete with force failed ($@) — trying service restart");
+        } elsif (defined $ext->{targetextent_id}) {
+            # force=true was not enough (CORE 13 strict session enforcement).
+            # Restart the TrueNAS iSCSI service to purge all server-side session
+            # state, explicitly delete the targetextent (now possible with the
+            # service down), then delete the extent cleanly.
+            _log('warning', "free_image: force delete failed ($@) — falling back to service restart + explicit targetextent delete");
             for my $attempt (1..5) {
                 eval { _api($scfg, 'POST', '/service/restart', { service => 'iscsitarget' }) };
-                eval { _api($scfg, 'DELETE', "/iscsi/extent/id/$ext->{extent_id}",
-                            { force => JSON::true }) };
+                eval { _api($scfg, 'DELETE', "/iscsi/targetextent/id/$ext->{targetextent_id}") };
+                if ($@) {
+                    _log('warning', "free_image: targetextent delete attempt $attempt failed: $@");
+                    sleep $attempt;
+                    next;
+                }
+                eval { _api($scfg, 'DELETE', "/iscsi/extent/id/$ext->{extent_id}") };
                 if (!$@) { $deleted = 1; last; }
                 _log('warning', "free_image: extent delete attempt $attempt failed: $@");
                 sleep $attempt;
