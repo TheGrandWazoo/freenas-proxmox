@@ -23,6 +23,8 @@ use PVE::Storage::Plugin;
 
 use base qw(PVE::Storage::Plugin);
 
+our $VERSION = '3.0.0';
+
 # Per-host runtime state cache: { $host => { ua, target => { id, iqn } } }
 my $state = {};
 

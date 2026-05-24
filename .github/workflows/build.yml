@@ -5,7 +5,7 @@ on:
     branches: ["**"]
     tags: ["v*.*.*"]
   pull_request:
-    branches: [master]
+    branches: [master, "release/3.x"]
 
 env:
   PACKAGE_NAME: freenas-proxmox
@@ -21,31 +21,35 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Install lint tools
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y \
             shellcheck libperl-critic-perl \
-            libwww-perl libio-socket-ssl-perl librest-client-perl libjson-perl
-          # PVE::SafeSyslog only exists on Proxmox hosts; stub it for syntax checking
-          mkdir -p /tmp/pve-stub/PVE
+            libwww-perl libio-socket-ssl-perl libjson-perl
+
+          # Stub PVE modules not available outside Proxmox hosts
+          mkdir -p /tmp/pve-stub/PVE/Storage
           printf 'package PVE::SafeSyslog;\nuse Exporter "import";\nour @EXPORT = qw(syslog);\nsub syslog {}\n1;\n' \
             > /tmp/pve-stub/PVE/SafeSyslog.pm
+          printf 'package PVE::Tools;\nuse Exporter "import";\nour @EXPORT_OK = qw(run_command);\nsub run_command {}\n1;\n' \
+            > /tmp/pve-stub/PVE/Tools.pm
+          printf 'package PVE::Storage::Plugin;\nsub new {}\nsub register {}\nsub lookup_types { [] }\nsub properties { {} }\nsub options { {} }\n1;\n' \
+            > /tmp/pve-stub/PVE/Storage/Plugin.pm
 
-      - name: Perl syntax check (all modules)
+      - name: Perl syntax check
         run: |
           echo "==> Checking Perl syntax..."
-          find perl5 stable-*/perl5 -name "*.pm" -print0 \
-            | xargs -0 -I{} perl -c -I/tmp/pve-stub {} \
-            && echo "All .pm files OK"
+          perl -c -I/tmp/pve-stub perl5/PVE/Storage/Custom/TrueNAS.pm \
+            && echo "TrueNAS.pm: OK"
 
       - name: Perl static analysis (perlcritic)
         run: |
           echo "==> Running perlcritic..."
           perlcritic --profile .perlcriticrc \
-            perl5/PVE/Storage/LunCmd/FreeNAS.pm
+            perl5/PVE/Storage/Custom/TrueNAS.pm
 
       - name: Shell script lint (shellcheck)
         run: |
@@ -55,39 +59,11 @@ jobs:
             packaging/DEBIAN/postrm
           echo "Shell scripts OK"
 
-  # ── Job 2: Validate patches apply cleanly ──────────────────────────────────
-  validate-patches:
-    name: Validate Patches
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: "Dry-run patch: ZFSPlugin (PVE 8)"
-        run: |
-          patch --dry-run --ignore-whitespace \
-            stable-8/perl5/PVE/Storage/ZFSPlugin.pm.orig \
-            < stable-8/perl5/PVE/Storage/ZFSPlugin.pm.patch \
-            && echo "ZFSPlugin PVE-8 patch: OK"
-
-      - name: "Dry-run patch: ZFSPlugin (PVE 8.4.x)"
-        run: |
-          patch --dry-run --ignore-whitespace \
-            stable-8/perl5/PVE/Storage/ZFSPlugin-8.4.14_1.pm.orig \
-            < stable-8/perl5/PVE/Storage/ZFSPlugin-8.4.14_1.pm.patch \
-            && echo "ZFSPlugin PVE-8.4 patch: OK"
-
-      - name: "Dry-run patch: apidoc.js (PVE 8)"
-        run: |
-          patch --dry-run --ignore-whitespace \
-            stable-8/pve-docs/api-viewer/apidoc.js.orig \
-            < stable-8/pve-docs/api-viewer/apidoc.js.patch \
-            && echo "apidoc PVE-8 patch: OK"
-
-  # ── Job 3: Build .deb ────────────────────────────────────────────────────────
+  # ── Job 2: Build .deb ────────────────────────────────────────────────────────
   build:
     name: Build Package
     runs-on: ubuntu-latest
-    needs: [lint, validate-patches]
+    needs: [lint]
 
     outputs:
       version:         ${{ steps.vars.outputs.version }}
@@ -97,20 +73,20 @@ jobs:
       is_release:      ${{ steps.vars.outputs.is_release }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
-          # Fetch full history so tag-based versioning works
           fetch-depth: 0
 
       # ── Version resolution ─────────────────────────────────────────────────
       # Version strategy:
-      #   Tagged release (v1.2.3)  →  1.2.3              (stable channel)
-      #   master branch            →  <tag>-beta+<sha>   (testing channel)
-      #   feature_* branch         →  <tag>-alpha+<sha>  (development channel)
-      #   any other branch / PR    →  <tag>-dev+<sha>    (no publish)
+      #   Tagged release (v3.x.x)   →  3.x.x-1           (stable channel)
+      #   release/3.x branch        →  <ver>~beta+<sha>   (testing channel)
+      #   master branch             →  <ver>~beta+<sha>   (testing channel)
+      #   release/* branches        →  <ver>~alpha+<sha>  (development)
+      #   everything else / PRs     →  <ver>~dev+<sha>    (no publish)
       #
-      # The base version is derived from the most recent git tag (vX.Y.Z).
-      # No VERSION file needed — the tag IS the version.
+      # Tilde (~) sorts BELOW the base version in dpkg, so pre-release builds
+      # never upgrade over a stable package. Stable uses "-1" Debian revision.
       - name: Resolve version and channel
         id: vars
         run: |
@@ -118,31 +94,25 @@ jobs:
           REF="${{ github.ref }}"
           IS_RELEASE="false"
 
-          # Base version from our $VERSION in FreeNAS.pm — the single source of truth.
-          # Bump that variable when starting a new release series; git tags trigger publishing.
+          # $VERSION in TrueNAS.pm is the single source of truth.
           BASE_VERSION="$(perl -ne 'if (/our\s+\$VERSION\s*=\s*['"'"'"]([^'"'"'"]+)/) { print $1; exit }' \
-            perl5/PVE/Storage/LunCmd/FreeNAS.pm 2>/dev/null || echo '0.0.0')"
+            perl5/PVE/Storage/Custom/TrueNAS.pm 2>/dev/null || echo '0.0.0')"
 
-          # Only an exact vX.Y.Z tag (no suffix) is a stable release.
-          # Stable packages use a "-1" Debian revision so they sort higher than
-          # any pre-release build (e.g. 2.3.0~beta+sha < 2.3.0-1).
-          # Pre-release builds use "~" (tilde) which sorts BELOW the base version
-          # in dpkg, ensuring stable always wins on apt upgrade.
           if [[ "$REF" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             VERSION="${REF#refs/tags/v}-1"
             CHANNEL="stable"
             CLOUDSMITH_REPO="truenas-proxmox"
             IS_RELEASE="true"
             if [[ "${REF#refs/tags/v}" != "$BASE_VERSION" ]]; then
-              echo "::warning::Tag version (${REF#refs/tags/v}) does not match \$VERSION in FreeNAS.pm ($BASE_VERSION)"
+              echo "::warning::Tag version (${REF#refs/tags/v}) does not match \$VERSION in TrueNAS.pm ($BASE_VERSION)"
             fi
 
-          elif [[ "$REF" == refs/heads/master ]]; then
+          elif [[ "$REF" == refs/heads/master || "$REF" == refs/heads/release/3.x ]]; then
             VERSION="${BASE_VERSION}~beta+${SHORT_SHA}"
             CHANNEL="testing"
             CLOUDSMITH_REPO="truenas-proxmox-testing"
 
-          elif [[ "$REF" == refs/heads/feature_* ]]; then
+          elif [[ "$REF" == refs/heads/release/* ]]; then
             VERSION="${BASE_VERSION}~alpha+${SHORT_SHA}"
             CHANNEL="development"
             CLOUDSMITH_REPO="truenas-proxmox-snapshots"
@@ -177,9 +147,7 @@ jobs:
           STAGING="dist"
 
           mkdir -p "${STAGING}/DEBIAN"
-          mkdir -p "${STAGING}/usr/share/freenas-proxmox/patches/ZFSPlugin"
-          mkdir -p "${STAGING}/usr/share/freenas-proxmox/patches/pvemanagerlib"
-          mkdir -p "${STAGING}/usr/share/freenas-proxmox/patches/apidoc"
+          mkdir -p "${STAGING}/usr/share/freenas-proxmox"
 
           # Generate control file from template
           sed "s/\${VERSION}/${VERSION}/" packaging/DEBIAN/control.j2 \
@@ -188,46 +156,11 @@ jobs:
           # Maintainer scripts
           cp packaging/DEBIAN/postinst "${STAGING}/DEBIAN/postinst"
           cp packaging/DEBIAN/postrm   "${STAGING}/DEBIAN/postrm"
-          cp packaging/DEBIAN/triggers "${STAGING}/DEBIAN/triggers"
           chmod 0755 "${STAGING}/DEBIAN/postinst" "${STAGING}/DEBIAN/postrm"
 
-          # Plugin source files
-          cp perl5/PVE/Storage/LunCmd/FreeNAS.pm  "${STAGING}/usr/share/freenas-proxmox/FreeNAS.pm"
-          cp perl5/REST/Client.pm                  "${STAGING}/usr/share/freenas-proxmox/REST-Client.pm"
-
-          # PVE 8 patches (8.0.x – 8.3.x)
-          cp stable-8/perl5/PVE/Storage/ZFSPlugin.pm.patch \
-             "${STAGING}/usr/share/freenas-proxmox/patches/ZFSPlugin/8.patch"
-
-          # PVE 8.4.x ZFSPlugin patch — indentation changed in 8.4, incompatible with 8.patch
-          cp stable-8/perl5/PVE/Storage/ZFSPlugin-8.4.14_1.pm.patch \
-             "${STAGING}/usr/share/freenas-proxmox/patches/ZFSPlugin/8.4.patch"
-          echo "Bundled PVE 8.4.x ZFSPlugin patch"
-          cp stable-8/pve-manager/js/pvemanagerlib.js.patch \
-             "${STAGING}/usr/share/freenas-proxmox/patches/pvemanagerlib/8.patch"
-          cp stable-8/pve-docs/api-viewer/apidoc.js.patch \
-             "${STAGING}/usr/share/freenas-proxmox/patches/apidoc/8.patch"
-
-          # PVE 8.4.x pvemanagerlib patch — JS was reformatted in 8.4, incompatible with 8.patch
-          cp stable-8/pve-manager/js/pvemanagerlib-8.4.14_1.js.patch \
-             "${STAGING}/usr/share/freenas-proxmox/patches/pvemanagerlib/8.4.patch"
-          echo "Bundled PVE 8.4.x pvemanagerlib patch"
-
-          # PVE 7 patches (best-effort — use latest versioned patch available)
-          for type in ZFSPlugin pvemanagerlib apidoc; do
-            case "$type" in
-              ZFSPlugin)    glob="stable-7/perl5/PVE/Storage/ZFSPlugin-*.pm.patch" ;;
-              pvemanagerlib) glob="stable-7/pve-manager/js/pvemanagerlib-*.js.patch" ;;
-              apidoc)       glob="stable-7/pve-docs/api-viewer/apidoc-*.js.patch" ;;
-            esac
-            latest=$(ls $glob 2>/dev/null | sort -V | tail -1 || true)
-            if [ -n "$latest" ]; then
-              cp "$latest" "${STAGING}/usr/share/freenas-proxmox/patches/${type}/7.patch"
-              echo "Bundled PVE-7 ${type} patch: $(basename $latest)"
-            else
-              echo "No PVE-7 ${type} patch found — skipping"
-            fi
-          done
+          # Plugin files (postinst copies these to their final destinations)
+          cp perl5/PVE/Storage/Custom/TrueNAS.pm  "${STAGING}/usr/share/freenas-proxmox/TrueNAS.pm"
+          cp ui/truenas-storage.js                 "${STAGING}/usr/share/freenas-proxmox/truenas-storage.js"
 
           echo "==> Package contents:"
           find "${STAGING}" | sort
@@ -245,22 +178,21 @@ jobs:
           dpkg-deb --contents "${{ steps.vars.outputs.deb_file }}"
 
       - name: Upload package artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.vars.outputs.deb_file }}
           path: ${{ steps.vars.outputs.deb_file }}
           retention-days: 30
 
-  # ── Job 4: Security scan ─────────────────────────────────────────────────────
+  # ── Job 3: Security scan ─────────────────────────────────────────────────────
   security:
     name: Security Scan
     runs-on: ubuntu-latest
     needs: build
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      # Scan the repository for secrets and known vulnerabilities
       - name: Run Trivy (repo scan — secrets + misconfig)
         uses: aquasecurity/trivy-action@master
         with:
@@ -271,9 +203,8 @@ jobs:
           exit-code: 1
           format: table
 
-      # Download and scan the built .deb
       - name: Download built package
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build.outputs.deb_file }}
 
@@ -292,7 +223,7 @@ jobs:
           exit-code: 1
           format: table
 
-  # ── Job 5: Publish ───────────────────────────────────────────────────────────
+  # ── Job 4: Publish ───────────────────────────────────────────────────────────
   publish:
     name: Publish
     runs-on: ubuntu-latest
@@ -301,10 +232,10 @@ jobs:
     if: github.event_name == 'push' && needs.build.outputs.channel != 'none'
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Download built package
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build.outputs.deb_file }}
 
@@ -331,28 +262,26 @@ jobs:
           body: |
             ## freenas-proxmox v${{ needs.build.outputs.version }}
 
-            > **Edit before publishing** — fill in tested versions and remove inapplicable notices below.
+            > **Edit before publishing** — fill in tested versions before publishing.
 
-            ### ⚠️ Version Compatibility Notices
+            ### Compatibility
 
-            | Your Proxmox VE | What to do |
-            |:----------------|:-----------|
-            | **PVE 9+** | ❌ Do **not** install v2.x — use v3.0 when released |
-            | **PVE 8.x** | ✅ Supported. Note: PVE 8 EOL is **2026-08-31** — plan your upgrade to PVE 9 + v3.0 |
-            | **PVE 7.x** | ⚠️ Best-effort only. This is the **last v2.x release** supporting PVE 7. Do **not** upgrade to v3.0 — stay on v2.x |
-            | **PVE 6 or older** | ❌ Not supported |
+            | Proxmox VE | Status |
+            |:-----------|:-------|
+            | **PVE 9+** | ✅ Supported |
+            | **PVE 8.x** | ✅ Supported (EOL 2026-08-31 — plan upgrade to PVE 9) |
+            | **PVE 7 or older** | ❌ Not supported — use v2.x |
 
             ### Tested Proxmox VE Versions
             - Proxmox VE 8.4.x (tested: )
-            - Proxmox VE 8.3.x (tested: )
-            - Proxmox VE 7.x (best-effort: )
+            - Proxmox VE 9.x (tested: )
 
             ### Tested TrueNAS Versions
-            - TrueNAS CORE:
-            - TrueNAS SCALE:
+            - TrueNAS CORE 13.x (tested: )
+            - TrueNAS SCALE 24.10.x (tested: )
 
             ### Installation
             See [README → Installation](https://github.com/TheGrandWazoo/freenas-proxmox#installation).
 
             ### Changes
-            See [CHANGELOG.md](https://github.com/TheGrandWazoo/freenas-proxmox/blob/master/CHANGELOG.md#unreleased).
+            See [CHANGELOG.md](https://github.com/TheGrandWazoo/freenas-proxmox/blob/release/3.x/CHANGELOG.md).
