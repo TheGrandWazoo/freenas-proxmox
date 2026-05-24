@@ -307,12 +307,17 @@ sub _dev_path {
     return "/dev/disk/by-path/ip-${portal}:3260-iscsi-${iqn}-lun-${lun_id}";
 }
 
-# Waits up to $timeout seconds for a block device node to appear
+# Waits up to $timeout seconds for a block device node to appear.
+# Rescans the iSCSI session periodically so the kernel discovers new LUNs
+# that were added after the session was established.
 sub _wait_for_device {
     my ($dev_path, $timeout) = @_;
     $timeout //= 30;
-    for (1 .. $timeout) {
+    for my $i (1 .. $timeout) {
         return 1 if -b $dev_path;
+        # Rescan at t=1, 6, 11, 16 … to pick up newly exported LUNs
+        eval { run_command(['iscsiadm', '-m', 'session', '--rescan'], noerr => 1) }
+            if $i % 5 == 1;
         sleep 1;
     }
     die "Timed out after ${timeout}s waiting for device $dev_path\n";
