@@ -213,6 +213,71 @@ This removes the plugin and reverses all patches, returning your Proxmox VE inst
 
 ## Troubleshooting
 
+### Understanding what this plugin does — and does not — do
+
+Before reporting an issue, it helps to know which layer the error is coming from. This plugin is an **orchestrator**: it calls the TrueNAS REST API to provision resources (create zvols, iSCSI extents, and target mappings). It does not carry data. The actual disk I/O path — QEMU reading and writing blocks — runs directly between Proxmox and TrueNAS over iSCSI, with no involvement from this plugin.
+
+There are three distinct layers where errors can appear:
+
+**Layer 1 — Plugin (TrueNAS REST API)**
+
+The plugin called the TrueNAS API and got an error, or the API was unreachable. These errors come from the plugin code and appear in the Proxmox task log with prefixes like `freenas-proxmox:` or `[TrueNAS::]`.
+
+Common causes:
+- Wrong API host IP or hostname
+- HTTP vs HTTPS mismatch (toggle **Use SSL**)
+- API token expired, revoked, or not entered correctly
+- TrueNAS iSCSI service not running
+- TrueNAS API service not reachable from the Proxmox node
+
+Example log line:
+```
+freenas-proxmox: Unable to connect to the TrueNAS API at '192.168.1.10' using HTTPS (500)
+```
+
+**Layer 2 — iSCSI / QEMU data path**
+
+The VM's QEMU process (v3.0) or the Proxmox kernel iSCSI stack (v2.x) failed to connect or lost its session to TrueNAS. These errors come from QEMU or `iscsiadm` — not from this plugin.
+
+In **v3.0**, look for QEMU log lines referencing `iscsi://` paths. In **v2.x**, look for `iscsiadm` lines in syslog.
+
+Common causes:
+- TrueNAS iSCSI service stopped while a VM was running
+- Initiator group does not permit the Proxmox node's IP
+- Network path to the iSCSI portal is down
+- CHAP authentication configured on the TrueNAS target but not in Proxmox (note: this plugin does not configure CHAP — it must be set to None or configured separately)
+
+Example log line (v2.x):
+```
+iscsiadm: No active sessions.
+```
+
+**Layer 3 — Proxmox core storage stack**
+
+Errors from PVE's own storage subsystem — ZFSPlugin.pm, pvedaemon, pool listing via SSH, or storage.cfg parsing. These exist regardless of which iSCSI plugin you use.
+
+Common causes:
+- SSH keys not configured between Proxmox and TrueNAS (required for ZFS pool listing — see [Prerequisites](#prerequisites))
+- `storage.cfg` syntax error
+- `pvedaemon` or `pvestatd` service crashed
+
+Example log line:
+```
+unable to run command '/usr/bin/ssh ... zfs list ...': exit code 255
+```
+
+**Quick triage:**
+
+| Symptom | Likely layer | First check |
+|---------|-------------|-------------|
+| Disk creation fails, API error in task log | Plugin (Layer 1) | API key, SSL setting, TrueNAS API reachable |
+| Disk created on TrueNAS but Proxmox reports error | Plugin (Layer 1) | syslog for `freenas-proxmox:` lines |
+| VM won't start, iSCSI session error | iSCSI/QEMU (Layer 2) | TrueNAS iSCSI service, initiator group ACL |
+| Storage shows unavailable, pool listing fails | Proxmox core (Layer 3) | SSH key setup, `pvedaemon` service |
+| Kernel errors after disk deletion (v2.x) | iSCSI/Proxmox (Layer 2/3) | `iscsiadm -m session -R` to rescan |
+
+---
+
 ### After install, the "FreeNAS/TrueNAS API" option is not visible
 
 Refresh your browser (force-refresh with Ctrl+Shift+R or Cmd+Shift+R). The Proxmox UI JavaScript is cached aggressively.
