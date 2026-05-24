@@ -222,13 +222,12 @@ sub _resolve_target {
           . "Configure a portal in TrueNAS iSCSI settings or set truenas_portal_ip.\n";
     }
 
-    my $tgroups = _api($scfg, 'GET', '/iscsi/targetgroup') // [];
-    my %matched_target_ids;
-    for my $g (@$tgroups) {
-        $matched_target_ids{$g->{target}} = 1 if $our_portal_ids{$g->{portal}};
-    }
-
-    my @matched = grep { $matched_target_ids{$_->{id}} } @$targets;
+    # Filter targets by portal using target.groups[].portal.
+    # This works on both TrueNAS CORE (no /iscsi/targetgroup endpoint) and SCALE.
+    my @matched = grep {
+        my $t = $_;
+        grep { $our_portal_ids{ $_->{portal} } } @{ $t->{groups} // [] };
+    } @$targets;
 
     if (@matched == 0) {
         die "No iSCSI targets found for portal $portal_ip on $host. "
