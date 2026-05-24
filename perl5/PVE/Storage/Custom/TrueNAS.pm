@@ -436,62 +436,52 @@ sub free_image {
     my $ext = _find_extent($scfg, $volname);
 
     if ($ext) {
-        if (defined $ext->{targetextent_id}) {
-            # TrueNAS CORE 13 keeps iSCSI sessions in recovery state after TCP
-            # disconnect — a reload is not sufficient to clear them.  A service
-            # restart immediately purges all server-side session state, which is
-            # the only reliable way to allow targetextent deletion.
-            my $target = _resolve_target($scfg);
-            my $portal = _portal($scfg);
-            my $iqn    = $target->{iqn};
+        my $target = _resolve_target($scfg);
+        my $portal = _portal($scfg);
+        my $iqn    = $target->{iqn};
 
-            # TrueNAS CORE 13 refuses targetextent deletion while any iSCSI session
-            # exists. We log out, restart the service to purge server-side state,
-            # then immediately attempt the DELETE. pvedaemon workers can race us
-            # and reconnect the session, so we retry up to 5 times with a fresh
-            # logout+restart cycle each time.
-            my $deleted = 0;
-            for my $attempt (1..5) {
-                # Log out any active session for this target
-                my $sessions = '';
-                eval { run_command(['iscsiadm', '-m', 'session'],
-                                   outfunc => sub { $sessions .= shift . "\n" },
-                                   noerr   => 1) };
-                for my $sid ($sessions =~ /\[(\d+)\][^\n]*\Q$iqn\E/g) {
-                    _log('info', "free_image: logging out iSCSI session $sid (attempt $attempt)");
-                    eval { run_command(['iscsiadm', '-m', 'session', '-r', $sid, '--logout'],
-                                       noerr => 1) };
-                }
-
-                # Restart TrueNAS iSCSI service to clear all server-side session state
-                _log('info', "free_image: restarting TrueNAS iSCSI service (attempt $attempt)");
-                eval { _api($scfg, 'POST', '/service/restart', { service => 'iscsitarget' }) };
-
-                eval { _api($scfg, 'DELETE', "/iscsi/targetextent/id/$ext->{targetextent_id}") };
-                if ($@) {
-                    _log('warning', "free_image: targetextent delete attempt $attempt failed: $@");
-                    sleep $attempt;    # back off before retry
-                    next;
-                }
-                $deleted = 1;
-                last;
-            }
-            die "free_image: could not delete targetextent $ext->{targetextent_id} after 5 attempts\n"
-                unless $deleted;
-
-            _api($scfg, 'DELETE', "/iscsi/extent/id/$ext->{extent_id}");
-
-            # Restore the session so remaining LUNs stay accessible
-            _log('info', "free_image: restoring iSCSI session");
-            eval { run_command(['iscsiadm', '-m', 'discovery', '-t', 'sendtargets',
-                                '-p', "$portal:3260"], noerr => 1) };
-            eval { run_command(['iscsiadm', '-m', 'node', '-T', $iqn,
-                                '-p', "$portal:3260", '--login'], noerr => 1) };
-            eval { run_command(['iscsiadm', '-m', 'session', '--rescan'], noerr => 1) };
-        } else {
-            _api($scfg, 'DELETE', "/iscsi/extent/id/$ext->{extent_id}");
-            _reload_iscsi($scfg);
+        # Log out any active initiator session for this target before we touch TrueNAS.
+        my $sessions = '';
+        eval { run_command(['iscsiadm', '-m', 'session'],
+                           outfunc => sub { $sessions .= shift . "\n" },
+                           noerr   => 1) };
+        for my $sid ($sessions =~ /\[(\d+)\][^\n]*\Q$iqn\E/g) {
+            _log('info', "free_image: logging out iSCSI session $sid");
+            eval { run_command(['iscsiadm', '-m', 'session', '-r', $sid, '--logout'],
+                               noerr => 1) };
         }
+
+        # Delete the extent with force=true.  The v2.0 API cascades targetextent
+        # deletion automatically — explicit targetextent DELETE is not needed and
+        # would fail with 422 "target in use" if any session is still active.
+        # If force is not enough (CORE 13 is strict about active sessions), restart
+        # the TrueNAS iSCSI service to purge server-side state and retry.
+        my $deleted = 0;
+        eval { _api($scfg, 'DELETE', "/iscsi/extent/id/$ext->{extent_id}",
+                    { force => JSON::true }) };
+        if (!$@) {
+            $deleted = 1;
+        } else {
+            _log('warning', "free_image: extent delete with force failed ($@) — trying service restart");
+            for my $attempt (1..5) {
+                eval { _api($scfg, 'POST', '/service/restart', { service => 'iscsitarget' }) };
+                eval { _api($scfg, 'DELETE', "/iscsi/extent/id/$ext->{extent_id}",
+                            { force => JSON::true }) };
+                if (!$@) { $deleted = 1; last; }
+                _log('warning', "free_image: extent delete attempt $attempt failed: $@");
+                sleep $attempt;
+            }
+        }
+        die "free_image: could not delete extent $ext->{extent_id} after retries\n"
+            unless $deleted;
+
+        # Restore the session so remaining LUNs stay accessible
+        _log('info', "free_image: restoring iSCSI session");
+        eval { run_command(['iscsiadm', '-m', 'discovery', '-t', 'sendtargets',
+                            '-p', "$portal:3260"], noerr => 1) };
+        eval { run_command(['iscsiadm', '-m', 'node', '-T', $iqn,
+                            '-p', "$portal:3260", '--login'], noerr => 1) };
+        eval { run_command(['iscsiadm', '-m', 'session', '--rescan'], noerr => 1) };
     } else {
         _log('warning', "free_image: no iSCSI extent found for $volname — skipping extent removal");
     }
