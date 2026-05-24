@@ -66,11 +66,14 @@ sub properties {
             default     => 0,
         },
         truenas_pool => {
-            description => "ZFS pool name on TrueNAS (e.g. 'tank')",
+            description => "ZFS pool or dataset path where PVE volumes are created "
+                         . "(e.g. 'tank' or 'tank/proxmox/vdisks'). "
+                         . "Matches the 'pool' field from the v2.x plugin.",
             type        => 'string',
         },
         truenas_dataset => {
-            description => "Dataset path within the pool for volume storage (e.g. 'proxmox'). Optional.",
+            description => "Optional additional sub-dataset appended to Pool path. "
+                         . "Leave blank — put the full path in Pool instead.",
             type        => 'string',
         },
         truenas_portal_ip => {
@@ -347,9 +350,12 @@ sub _iscsi_ensure_session {
 sub status {
     my ($class, $storeid, $scfg, $cache) = @_;
 
+    # truenas_pool may be a full dataset path (e.g. tank/proxmox/vdisks).
+    # The /pool API matches on the top-level pool name only.
+    my $pool_name = (split m{/}, $scfg->{truenas_pool})[0];
     my $pools = _api($scfg, 'GET', '/pool') // [];
-    my ($pool) = grep { $_->{name} eq $scfg->{truenas_pool} } @$pools;
-    die "Pool '$scfg->{truenas_pool}' not found on $scfg->{truenas_host}\n" unless $pool;
+    my ($pool) = grep { $_->{name} eq $pool_name } @$pools;
+    die "Pool '$pool_name' not found on $scfg->{truenas_host}\n" unless $pool;
 
     my $total = $pool->{size}      // 0;
     my $free  = $pool->{free}      // 0;

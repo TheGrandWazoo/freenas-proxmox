@@ -82,19 +82,19 @@ Ext.define('PVE.storage.TrueNASInputPanel', {
             },
             {
                 xtype: me.isCreate ? 'proxmoxtextfield' : 'displayfield',
-                fieldLabel: gettext('Pool'),
+                fieldLabel: gettext('Pool / Dataset Path'),
                 name: 'truenas_pool',
                 allowBlank: false,
                 autoComplete: false,
-                emptyText: gettext('ZFS pool name (e.g. tank)'),
+                emptyText: gettext('ZFS path where volumes live (e.g. tank or tank/proxmox/vdisks)'),
             },
             {
                 xtype: 'proxmoxtextfield',
-                fieldLabel: gettext('Dataset'),
+                fieldLabel: gettext('Sub-dataset'),
                 name: 'truenas_dataset',
                 allowBlank: true,
                 autoComplete: false,
-                emptyText: gettext('Optional (e.g. proxmox)'),
+                emptyText: gettext('Leave blank — extra sub-path below Pool if needed'),
                 deleteEmpty: !me.isCreate,
             },
         ];
