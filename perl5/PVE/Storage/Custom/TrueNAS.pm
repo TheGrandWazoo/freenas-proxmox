@@ -35,7 +35,7 @@ sub type { return 'truenas'; }
 
 sub plugindata {
     return {
-        content => [ { images => 1, rootdir => 1 }, { images => 1 } ],
+        content => [ { images => 1 }, { images => 1 } ],
         format  => [ { raw    => 1 },               'raw'           ],
         # sensitive-properties intentionally omitted: PVE strips those keys from
         # $param before check_config and passes them only to on_add_hook/on_update_hook,
@@ -445,23 +445,40 @@ sub free_image {
             my $portal = _portal($scfg);
             my $iqn    = $target->{iqn};
 
-            # Logout from the initiator side
-            my $sessions = '';
-            eval { run_command(['iscsiadm', '-m', 'session'],
-                               outfunc => sub { $sessions .= shift . "\n" },
-                               noerr   => 1) };
-            if ($sessions =~ /\[(\d+)\][^\n]*\Q$iqn\E/) {
-                my $sid = $1;
-                _log('info', "free_image: logging out iSCSI session $sid");
-                eval { run_command(['iscsiadm', '-m', 'session', '-r', $sid, '--logout'],
-                                   noerr => 1) };
+            # TrueNAS CORE 13 refuses targetextent deletion while any iSCSI session
+            # exists. We log out, restart the service to purge server-side state,
+            # then immediately attempt the DELETE. pvedaemon workers can race us
+            # and reconnect the session, so we retry up to 5 times with a fresh
+            # logout+restart cycle each time.
+            my $deleted = 0;
+            for my $attempt (1..5) {
+                # Log out any active session for this target
+                my $sessions = '';
+                eval { run_command(['iscsiadm', '-m', 'session'],
+                                   outfunc => sub { $sessions .= shift . "\n" },
+                                   noerr   => 1) };
+                for my $sid ($sessions =~ /\[(\d+)\][^\n]*\Q$iqn\E/g) {
+                    _log('info', "free_image: logging out iSCSI session $sid (attempt $attempt)");
+                    eval { run_command(['iscsiadm', '-m', 'session', '-r', $sid, '--logout'],
+                                       noerr => 1) };
+                }
+
+                # Restart TrueNAS iSCSI service to clear all server-side session state
+                _log('info', "free_image: restarting TrueNAS iSCSI service (attempt $attempt)");
+                eval { _api($scfg, 'POST', '/service/restart', { service => 'iscsitarget' }) };
+
+                eval { _api($scfg, 'DELETE', "/iscsi/targetextent/id/$ext->{targetextent_id}") };
+                if ($@) {
+                    _log('warning', "free_image: targetextent delete attempt $attempt failed: $@");
+                    sleep $attempt;    # back off before retry
+                    next;
+                }
+                $deleted = 1;
+                last;
             }
+            die "free_image: could not delete targetextent $ext->{targetextent_id} after 5 attempts\n"
+                unless $deleted;
 
-            # Restart TrueNAS iSCSI service to immediately clear server-side sessions
-            _log('info', "free_image: restarting TrueNAS iSCSI service to clear session state");
-            _api($scfg, 'POST', '/service/restart', { service => 'iscsitarget' });
-
-            _api($scfg, 'DELETE', "/iscsi/targetextent/id/$ext->{targetextent_id}");
             _api($scfg, 'DELETE', "/iscsi/extent/id/$ext->{extent_id}");
 
             # Restore the session so remaining LUNs stay accessible
@@ -524,6 +541,17 @@ sub list_images {
     }
 
     return \@vols;
+}
+
+sub volume_size_info {
+    my ($class, $scfg, $storeid, $volname, $timeout) = @_;
+
+    # The base class volume_size_info calls filesystem_path() which calls
+    # get_subdir() which dies on block storage. Query TrueNAS directly instead.
+    my $zvol = _zvol_prefix($scfg) . "/$volname";
+    my $enc  = uri_escape($zvol, "^A-Za-z0-9\\-_.~");
+    my $ds   = _api($scfg, 'GET', "/pool/dataset/id/$enc") // {};
+    return $ds->{volsize}{parsed} // 0;
 }
 
 sub path {
