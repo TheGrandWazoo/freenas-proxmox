@@ -428,6 +428,37 @@ sub alloc_image {
     return $name;
 }
 
+# Returns a list of VMIDs that are currently running and have at least one
+# disk on the given storage. Used to gate the service-stop fallback path.
+sub _running_vms_on_storage {
+    my ($storeid) = @_;
+    my @blocking;
+    my $cfgdir = '/etc/pve/qemu-server';
+    opendir(my $dh, $cfgdir) or return ();
+    while (my $f = readdir($dh)) {
+        next unless $f =~ /^(\d+)\.conf$/;
+        my $vmid = $1;
+        # Check running first (cheap) — PID file exists and process is alive
+        my $pidfile = "/var/run/qemu-server/$vmid.pid";
+        next unless -f $pidfile;
+        open(my $pf, '<', $pidfile) or next;
+        my $pid = <$pf>; chomp $pid;
+        close($pf);
+        next unless $pid && kill(0, $pid);
+        # VM is running — check if it uses this storage
+        open(my $cf, '<', "$cfgdir/$f") or next;
+        while (<$cf>) {
+            if (/^\w+:\s+\Q$storeid\E:/) {
+                push @blocking, $vmid;
+                last;
+            }
+        }
+        close($cf);
+    }
+    closedir($dh);
+    return @blocking;
+}
+
 sub free_image {
     my ($class, $storeid, $scfg, $volname, $isBase) = @_;
 
@@ -445,9 +476,16 @@ sub free_image {
             $deleted = 1;
         } elsif (defined $ext->{targetextent_id}) {
             # force=true is ignored by TrueNAS CORE 13 — unconditional session check.
-            # POST /service/restart is async and iscsid reconnects in milliseconds,
-            # so we must: disable auto-reconnect → logout → wait for service to stop
-            # → delete → re-enable auto-reconnect → login.
+            # The only reliable delete window requires stopping the TrueNAS iSCSI
+            # service entirely, which disrupts ALL LUNs on ALL targets. Refuse if
+            # any other VM on this node has disks on this storage and is running —
+            # stopping the service would cause io-error on those VMs.
+            my @blocking = _running_vms_on_storage($storeid);
+            die "free_image: cannot delete '$volname' while other VMs are running on "
+              . "storage '$storeid': VM(s) " . join(', ', map { "#$_" } @blocking)
+              . ". Stop those VMs first, then retry.\n"
+                if @blocking;
+
             _log('warning', "free_image: force delete failed — using service-stop fallback");
 
             my $target = _resolve_target($scfg);
