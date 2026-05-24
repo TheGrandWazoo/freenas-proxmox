@@ -1,4 +1,4 @@
-package PVE::Storage::Custom::TrueNASPlugin;
+package PVE::Storage::Custom::TrueNAS;
 
 # TrueNAS Custom Storage Plugin for Proxmox VE
 #
@@ -28,7 +28,7 @@ my $state = {};
 
 # ── Plugin identity ───────────────────────────────────────────────────────────
 
-sub api  { return 10; }
+sub api  { return 11; }
 sub type { return 'truenas'; }
 
 sub plugindata {
