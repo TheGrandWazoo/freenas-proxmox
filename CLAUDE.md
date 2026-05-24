@@ -2,79 +2,87 @@
 
 ## What This Project Is
 
-A storage plugin "wedge" for Proxmox VE (PVE) that allows PVE to manage iSCSI LUNs on TrueNAS/FreeNAS via the TrueNAS REST API instead of the traditional SSH-based `iscsiadm` approach.
+A native `PVE::Storage::Custom` plugin for Proxmox VE (PVE) that manages TrueNAS ZFS volumes over iSCSI via the TrueNAS REST API. Each VM gets its own dedicated iSCSI target; QEMU drives the connection directly via `iscsi://` paths — no `iscsiadm`, no SSH keys, no patches to PVE core files.
 
 The plugin installs as a Debian package and works by:
-1. Deploying a new Perl LunCmd handler (`FreeNAS.pm`) to `/usr/share/perl5/PVE/Storage/LunCmd/`
-2. Patching three Proxmox VE system files at install time via `dpkg triggers`
+1. Copying `TrueNAS.pm` to `/usr/share/perl5/PVE/Storage/Custom/` (auto-discovered by PVE)
+2. Copying `truenas-storage.js` to `/usr/share/pve-manager/js/` and injecting one `<script>` tag into `index.html.tpl`
 
 ## Repository Layout
 
 ```
 freenas-proxmox/
-├── perl5/PVE/Storage/
-│   ├── Custom/FreeNAS.pm          # Old attempt at a full custom storage type (unfinished)
-│   ├── LunCmd/FreeNAS.pm          # MAIN backend: iSCSI LunCmd via TrueNAS REST API
-│   ├── LunCmd/FreeNAS-ng.pm       # Next-gen draft (not in use)
-│   └── ZFSPlugin-*.pm.patch       # Per-PVE-version patches for ZFSPlugin.pm
-├── pve-manager/js/
-│   └── pvemanagerlib-*.js.patch   # Per-PVE-version patches for the Proxmox UI JS
-├── pve-docs/api-viewer/
-│   └── apidoc-*.js.patch          # Per-PVE-version patches for the API docs JS
-├── perl5/REST/Client.pm           # Bundled REST::Client (also an apt dependency)
-├── stable-5/, stable-6/, stable-7/, stable-8/
-│                                  # Per-major-version snapshots of patches + originals
-└── .github/workflows/action.yml   # Currently just dispatches to external packer repo
+├── perl5/PVE/Storage/Custom/TrueNAS.pm   # MAIN plugin — PVE::Storage::Custom subclass
+├── ui/truenas-storage.js                  # Proxmox UI panel (storageSchema + input panel)
+├── packaging/
+│   └── DEBIAN/
+│       ├── control.j2    # Package metadata template (VERSION substituted at build time)
+│       ├── postinst       # Install: copies .pm + .js, injects <script> tag, restarts PVE
+│       └── postrm         # Remove/purge: removes files, strips <script> tag, restarts PVE
+└── .github/workflows/
+    ├── build.yml          # Active CI: lint → build .deb → security scan → publish
+    └── action.yml         # Deprecated no-op (retained so old external links don't 404)
 ```
 
-## How the Current Build Works (Two-Repo Problem)
+## How the Build Works
 
-1. A push to this repo triggers `action.yml` which fires a `repository_dispatch` event to `TheGrandWazoo/freenas-proxmox-packer`
-2. That separate repo holds the DEBIAN package structure (`DEBIAN/control`, `postinst`, `postrm`, `triggers`)
-3. Its CI builds the `.deb` with `dpkg-deb` and pushes to Cloudsmith
+Everything lives in this repo — there is no external packer repo.
 
-The `postinst` script at install time **git-clones this repo** to `/usr/local/src/freenas-proxmox` and applies patches from there. This is the key fragility — internet access required at package install time.
+`.github/workflows/build.yml` runs on every push and tag:
 
-## Three Files That Get Patched at Install Time
+| Job | What it does |
+|-----|-------------|
+| **lint** | `perl -c` syntax check + perlcritic + shellcheck on postinst/postrm |
+| **build** | Resolves version from `$VERSION` in `TrueNAS.pm`, assembles `dist/` staging dir, runs `dpkg-deb`, uploads `.deb` as a workflow artifact |
+| **security** | Trivy repo scan (secrets + misconfig) + Trivy scan of extracted `.deb` contents |
+| **publish** | Pushes `.deb` to Cloudsmith; on `v*.*.*` tags also creates a draft GitHub Release |
 
-| File | What the patch adds |
-|------|---------------------|
-| `/usr/share/perl5/PVE/Storage/ZFSPlugin.pm` | Adds `freenas` as a valid iSCSI provider, routes `run_lun_command` to `FreeNAS.pm`, adds custom properties/options |
-| `/usr/share/pve-manager/js/pvemanagerlib.js` | Adds `FreeNAS/TrueNAS API` to the iSCSI provider dropdown; adds UI fields for API host, user, secret, SSL, token auth |
-| `/usr/share/pve-docs/api-viewer/apidoc.js` | Registers TrueNAS-specific properties in the API docs |
+### Version / Channel mapping
 
-## Authentication Modes Supported
+| Trigger | Version format | Cloudsmith repo |
+|---------|---------------|-----------------|
+| `v*.*.*` tag | `X.Y.Z-1` | `truenas-proxmox` (stable) |
+| `release/3.x` or `master` branch | `X.Y.Z~beta+<sha>` | `truenas-proxmox-testing` |
+| other `release/*` branches | `X.Y.Z~alpha+<sha>` | `truenas-proxmox-snapshots` |
+| PRs / feature branches | `X.Y.Z~dev+<sha>` | not published |
 
-- **Basic Auth**: `freenas_user` + `freenas_password` (deprecated but still works)
-- **Bearer Token**: `truenas_token_auth=true` + `truenas_secret` (preferred for TrueNAS SCALE)
+`$VERSION` in `TrueNAS.pm` is the single source of truth. A version tag that doesn't match emits a CI warning.
 
-## TrueNAS API Version Detection
+## Authentication
 
-The plugin auto-detects v1.0 vs v2.0 API based on the TrueNAS version string and HTTP response:
-- `>= 11.03.01.00` → uses v2.0 API
-- Older → uses v1.0 API
+- **Bearer Token** (required): `truenas_api_token` — set in PVE storage config
+
+Basic auth (`freenas_user` / `freenas_password`) was removed in v3.0. Bearer token is the only supported mode.
+
+## TrueNAS API
+
+v3.0 uses the TrueNAS v2.0 REST API exclusively. Supported:
+- TrueNAS CORE 11.3+ (confirmed tested: CORE 13.0-U6)
+- TrueNAS SCALE (confirmed tested: SCALE 24.10 Electric Eel)
 
 ## Known Issues / Active Work
 
-- Versioned patches are fragile — each PVE minor release may need a new patch
-- `postinst` clones the repo at install time (requires internet, fragile)
-- `Custom/FreeNAS.pm` is unfinished (duplicate `properties()` and `options()` subs)
-- REST::Client is both an apt dependency AND manually bundled
-- Everything is named `FreeNAS` internally but the product is now `TrueNAS`
-- SSH keys still required for ZFS pool listing (separate Proxmox code path via `ZFSPoolPlugin.pm`)
-- Max LUN limit bug (#150)
+- **#228** — v2.x→v3.0 migration: "Move Disk" confirmed working; in-place zvol rename script TBD
+- **#234** — Snapshot interface (PVE 9+): not started
+- **#243** — WebSocket API (SCALE 25.04+): future
+- **#249** — Per-variant dispatch: deferred to v3.1+
+- **#250** — alloc_image partial-failure rollback: narrow edge case, open
+- **#256** — Multipath support: deferred (no test hardware)
+- **#260** — TPM state disks incompatible with `iscsi://` paths: known limitation, store TPM state on local-lvm or NFS
 
-## Key Perl Modules
+## Key Perl Module
 
-- `PVE::Storage::LunCmd::FreeNAS` — the main plugin. Entry point: `run_lun_command()`
-- Functions: `freenas_api_connect`, `freenas_api_check`, `freenas_api_call`, `freenas_list_lu`, `run_create_lu`, `run_delete_lu`, `run_modify_lu`
+- `PVE::Storage::Custom::TrueNAS` (`perl5/PVE/Storage/Custom/TrueNAS.pm`) — the entire plugin
+- Entry points: `alloc_image`, `free_image`, `volume_size_info`, `path`, `activate_volume`, `deactivate_volume`
+- API helpers: `_api_call`, `_ensure_target`, `_running_vms_on_storage`
 
 ## Packaging / Deployment Notes
 
 - Package name: `freenas-proxmox`
 - Apt repos: Cloudsmith (`ksatechnologies/truenas-proxmox` stable, `ksatechnologies/truenas-proxmox-testing` beta)
-- Install: `apt install freenas-proxmox` after adding the repo
-- The package uses dpkg `triggers` to re-apply patches when Proxmox VE packages are upgraded
+- Install: `apt install freenas-proxmox` after adding the Cloudsmith repo
+- No dpkg triggers — install/remove are handled entirely by `postinst` / `postrm`
+- PVE auto-discovers the plugin via `/usr/share/perl5/PVE/Storage/Custom/` on daemon restart
 
 ## ADRs / Plans / Runbooks
 
