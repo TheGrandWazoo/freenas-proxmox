@@ -7,7 +7,14 @@ package PVE::Storage::Custom::TrueNAS;
 #
 # Supports: TrueNAS CORE 13.x, TrueNAS SCALE <= 24.10 (REST API v2.0)
 # Auth:     Bearer token (API key) only — basic auth removed in v3.0
-# iSCSI:    iscsiadm on PVE host for session login/logout (unavoidable)
+# iSCSI:    QEMU libiscsi (iscsi:// paths) — no iscsiadm session management
+#
+# Per-VM target architecture:
+#   Each VM gets its own iSCSI target (proxmox-vm-<vmid>).
+#   path() returns iscsi://portal/iqn:proxmox-vm-<vmid>/lun — QEMU connects via
+#   libiscsi.  When the VM stops, QEMU's connection closes.  TrueNAS sees no
+#   active session on that target, so extent DELETE (force=true) works without
+#   stopping the TrueNAS iSCSI service.
 
 use strict;
 use warnings;
@@ -18,14 +25,13 @@ use HTTP::Request   ();
 use URI::Escape     qw(uri_escape);
 use Sys::Syslog     qw(syslog);
 
-use PVE::Tools          qw(run_command);
 use PVE::Storage::Plugin;
 
 use base qw(PVE::Storage::Plugin);
 
 our $VERSION = '3.0.0';
 
-# Per-host runtime state cache: { $host => { ua, target => { id, iqn } } }
+# Per-host runtime state cache
 my $state = {};
 
 # ── Plugin identity ───────────────────────────────────────────────────────────
@@ -37,11 +43,6 @@ sub plugindata {
     return {
         content => [ { images => 1 }, { images => 1 } ],
         format  => [ { raw    => 1 },               'raw'           ],
-        # sensitive-properties intentionally omitted: PVE strips those keys from
-        # $param before check_config and passes them only to on_add_hook/on_update_hook,
-        # which means activate_storage never sees them.  The API key lives in
-        # storage.cfg (root-readable only, same as the v2.x truenas_secret).
-        # Proper private-key storage via on_add_hook is tracked in issue #247.
     };
 }
 
@@ -81,7 +82,9 @@ sub properties {
             type        => 'string',
         },
         truenas_target => {
-            description => "iSCSI target IQN. Leave blank to auto-discover from TrueNAS API.",
+            description => "Base iSCSI target name (used to look up portal and initiator "
+                         . "group settings for auto-created per-VM targets). "
+                         . "Leave blank to auto-discover from the portal IP.",
             type        => 'string',
         },
     };
@@ -165,6 +168,14 @@ sub _api {
     return decode_json($content);
 }
 
+# Returns (and caches) the iSCSI global config { basename, ... }
+sub _api_global {
+    my ($scfg) = @_;
+    my $host = $scfg->{truenas_host};
+    $state->{$host}{global} //= _api($scfg, 'GET', '/iscsi/global') // {};
+    return $state->{$host}{global};
+}
+
 # ── Private: TrueNAS domain helpers ──────────────────────────────────────────
 
 # Returns the zvol parent dataset path: "pool" or "pool/dataset"
@@ -175,37 +186,25 @@ sub _zvol_prefix {
     return $prefix;
 }
 
-# Returns the iSCSI portal IP/hostname to use for iscsiadm
+# Returns the iSCSI portal IP/hostname to use
 sub _portal {
     my ($scfg) = @_;
     return $scfg->{truenas_portal_ip} // $scfg->{truenas_host};
 }
 
-# Resolves and caches { id, iqn } for this storage's iSCSI target.
-# Uses truenas_target if configured; otherwise auto-discovers from the API.
-sub _resolve_target {
+# Returns the iSCSI global basename (e.g. "iqn.2005-10.org.freenas.ctl")
+sub _basename {
     my ($scfg) = @_;
-    my $host = $scfg->{truenas_host};
+    return _api_global($scfg)->{basename} // 'iqn.2005-10.org.freenas.ctl';
+}
 
-    return $state->{$host}{target} if $state->{$host}{target};
+# Finds the [ { portal, initiator, authmethod, auth } ] group list to use when
+# creating new per-VM targets.  Copies the first group found on an existing
+# target that uses our portal IP, so security settings (initiator group, auth)
+# are inherited automatically.
+sub _portal_groups_for_new_target {
+    my ($scfg) = @_;
 
-    my $targets = _api($scfg, 'GET', '/iscsi/target') // [];
-
-    # Explicit IQN or target name configured
-    if (my $configured = $scfg->{truenas_target}) {
-        for my $t (@$targets) {
-            # Accept full IQN (basename:name) or just the target name portion
-            if ($configured eq $t->{name} || $configured =~ /:\Q$t->{name}\E$/) {
-                $state->{$host}{target} = { id => $t->{id}, iqn => $configured };
-                _log('info', "Using configured iSCSI target: $configured (id=$t->{id})");
-                return $state->{$host}{target};
-            }
-        }
-        die "Configured iSCSI target '$configured' not found on $host. "
-          . "Verify the target name in TrueNAS or update truenas_target.\n";
-    }
-
-    # Auto-discover: find targets reachable via our portal IP
     my $portal_ip = _portal($scfg);
     my $portals   = _api($scfg, 'GET', '/iscsi/portal') // [];
 
@@ -220,36 +219,105 @@ sub _resolve_target {
         }
     }
 
-    unless (%our_portal_ids) {
-        die "No iSCSI portals found listening on $portal_ip on $host. "
-          . "Configure a portal in TrueNAS iSCSI settings or set truenas_portal_ip.\n";
+    die "No iSCSI portals found listening on $portal_ip — "
+      . "cannot create per-VM targets. Check truenas_portal_ip.\n"
+        unless %our_portal_ids;
+
+    my $targets = _api($scfg, 'GET', '/iscsi/target') // [];
+
+    # Prefer copying groups from the configured base target
+    if (my $base = $scfg->{truenas_target}) {
+        my ($bt) = grep { $_->{name} eq $base || "$_->{name}" =~ /:\Q$base\E$/ } @$targets;
+        if ($bt) {
+            my @gs = grep { $our_portal_ids{$_->{portal}} } @{$bt->{groups} // []};
+            return _clean_groups(\@gs) if @gs;
+        }
     }
 
-    # Filter targets by portal using target.groups[].portal.
-    # This works on both TrueNAS CORE (no /iscsi/targetgroup endpoint) and SCALE.
-    my @matched = grep {
-        my $t = $_;
-        grep { $our_portal_ids{ $_->{portal} } } @{ $t->{groups} // [] };
-    } @$targets;
-
-    if (@matched == 0) {
-        die "No iSCSI targets found for portal $portal_ip on $host. "
-          . "Create a target in TrueNAS or set truenas_target.\n";
-    }
-    if (@matched > 1) {
-        my $names = join(', ', map { $_->{name} } @matched);
-        die "Multiple iSCSI targets found for portal $portal_ip on $host: $names. "
-          . "Set truenas_target to specify which one.\n";
+    # Fall back to any existing target that uses our portal
+    for my $t (@$targets) {
+        my @gs = grep { $our_portal_ids{$_->{portal}} } @{$t->{groups} // []};
+        return _clean_groups(\@gs) if @gs;
     }
 
-    my $global   = _api($scfg, 'GET', '/iscsi/global') // {};
-    my $basename = $global->{basename} // 'iqn.2005-10.org.freenas.ctl';
-    my $t        = $matched[0];
-    my $iqn      = "$basename:$t->{name}";
+    # No existing targets — use first matching portal, no initiator restriction
+    my ($pid) = keys %our_portal_ids;
+    return [ { portal => $pid, initiator => undef, authmethod => 'NONE', auth => undef } ];
+}
 
-    $state->{$host}{target} = { id => $t->{id}, iqn => $iqn };
-    _log('info', "Auto-discovered iSCSI target: $iqn (id=$t->{id})");
-    return $state->{$host}{target};
+sub _clean_groups {
+    my ($gs) = @_;
+    return [ map { {
+        portal     => $_->{portal},
+        initiator  => $_->{initiator},
+        authmethod => $_->{authmethod} // 'NONE',
+        auth       => $_->{auth},
+    } } @$gs ];
+}
+
+# Finds or creates the per-VM iSCSI target for $vmid.
+# Returns { id, iqn }.
+sub _resolve_vm_target {
+    my ($scfg, $vmid) = @_;
+    my $host = $scfg->{truenas_host};
+
+    return $state->{$host}{vm_targets}{$vmid}
+        if $state->{$host}{vm_targets}{$vmid};
+
+    my $target_name = "proxmox-vm-$vmid";
+    my $targets     = _api($scfg, 'GET', '/iscsi/target') // [];
+    my ($existing)  = grep { $_->{name} eq $target_name } @$targets;
+
+    my ($t_id, $iqn);
+    if ($existing) {
+        $t_id = $existing->{id};
+        $iqn  = _basename($scfg) . ":$target_name";
+        _log('info', "Using existing per-VM target: $iqn (id=$t_id)");
+    } else {
+        my $groups = _portal_groups_for_new_target($scfg);
+        my $new    = _api($scfg, 'POST', '/iscsi/target', {
+            name   => $target_name,
+            alias  => "Proxmox VM $vmid",
+            mode   => 'ISCSI',
+            groups => $groups,
+        });
+        $t_id = $new->{id};
+        $iqn  = _basename($scfg) . ":$target_name";
+        _log('info', "Created per-VM target: $iqn (id=$t_id)");
+    }
+
+    $state->{$host}{vm_targets}{$vmid} = { id => $t_id, iqn => $iqn };
+    return $state->{$host}{vm_targets}{$vmid};
+}
+
+# Deletes the per-VM target if it has no remaining targetextent associations.
+sub _maybe_cleanup_vm_target {
+    my ($scfg, $vmid, $target_id) = @_;
+    return unless defined $target_id;
+
+    my $tes = _api($scfg, 'GET', "/iscsi/targetextent?target=$target_id") // [];
+    return if @$tes;    # still has extents — don't remove
+
+    eval { _api($scfg, 'DELETE', "/iscsi/target/id/$target_id") };
+    if ($@) {
+        _log('warning', "could not remove empty per-VM target id=$target_id (vm=$vmid): $@");
+    } else {
+        _log('info', "removed empty per-VM target id=$target_id (vm=$vmid)");
+        my $host = $scfg->{truenas_host};
+        delete $state->{$host}{vm_targets}{$vmid};
+    }
+}
+
+# Returns true if the QEMU process for $vmid is alive.
+sub _vm_is_running {
+    my ($vmid) = @_;
+    my $pidfile = "/var/run/qemu-server/$vmid.pid";
+    return 0 unless -f $pidfile;
+    open(my $pf, '<', $pidfile) or return 0;
+    my $pidraw = <$pf>;
+    close($pf);
+    my ($pid) = ($pidraw // '') =~ /^(\d+)/;    # untaint for -T
+    return ($pid && kill(0, $pid)) ? 1 : 0;
 }
 
 # Returns the next unused LUN ID on the given target
@@ -262,7 +330,8 @@ sub _next_lun_id {
     return $lun;
 }
 
-# Returns { extent_id, targetextent_id, lun_id } for a volname, or undef.
+# Returns { extent_id, targetextent_id, lun_id, target_id } for a volname,
+# or undef if no extent exists.
 sub _find_extent {
     my ($scfg, $volname) = @_;
 
@@ -275,8 +344,9 @@ sub _find_extent {
 
     return {
         extent_id       => $ext->{id},
-        targetextent_id => defined $te ? $te->{id}    : undef,
-        lun_id          => defined $te ? $te->{lunid} : 0,
+        targetextent_id => defined $te ? $te->{id}     : undef,
+        lun_id          => defined $te ? $te->{lunid}  : 0,
+        target_id       => defined $te ? $te->{target} : undef,
     };
 }
 
@@ -285,69 +355,6 @@ sub _reload_iscsi {
     my ($scfg) = @_;
     eval { _api($scfg, 'POST', '/service/reload', { service => 'iscsitarget' }) };
     _log('warning', "iSCSI reload failed (non-fatal): $@") if $@;
-}
-
-# ── Private: iSCSI / iscsiadm helpers ────────────────────────────────────────
-
-# Returns true if an iscsiadm session for the given IQN is already active
-sub _iscsi_session_exists {
-    my ($iqn) = @_;
-    my $out = '';
-    eval {
-        run_command(['iscsiadm', '-m', 'session'],
-                    outfunc => sub { $out .= shift . "\n" },
-                    noerr   => 1);
-    };
-    return $out =~ /\Q$iqn\E/;
-}
-
-# Returns the /dev/disk/by-path path for an iSCSI LUN
-sub _dev_path {
-    my ($portal, $iqn, $lun_id) = @_;
-    return "/dev/disk/by-path/ip-${portal}:3260-iscsi-${iqn}-lun-${lun_id}";
-}
-
-# Waits up to $timeout seconds for a block device node to appear.
-# Rescans the iSCSI session periodically so the kernel discovers new LUNs
-# that were added after the session was established.
-sub _wait_for_device {
-    my ($dev_path, $timeout) = @_;
-    $timeout //= 30;
-    for my $i (1 .. $timeout) {
-        return 1 if -b $dev_path;
-        # Rescan at t=1, 6, 11, 16 … to pick up newly exported LUNs
-        eval { run_command(['iscsiadm', '-m', 'session', '--rescan'], noerr => 1) }
-            if $i % 5 == 1;
-        sleep 1;
-    }
-    die "Timed out after ${timeout}s waiting for device $dev_path\n";
-}
-
-# Ensure the iscsiadm session is established for this storage.
-# Runs sendtargets discovery then logs in. Safe to call when already connected.
-sub _iscsi_ensure_session {
-    my ($scfg) = @_;
-
-    my $target = _resolve_target($scfg);
-    my $portal = _portal($scfg);
-    my $iqn    = $target->{iqn};
-
-    return if _iscsi_session_exists($iqn);
-
-    _log('info', "Logging in to iSCSI target $iqn via $portal:3260");
-
-    # Discovery populates the node record so --login works on first connect
-    eval {
-        run_command(
-            ['iscsiadm', '-m', 'discovery', '-t', 'sendtargets', '-p', "$portal:3260"],
-            noerr => 1,
-        );
-    };
-
-    run_command(
-        ['iscsiadm', '-m', 'node', '-T', $iqn, '-p', "$portal:3260", '--login'],
-        errmsg => "iscsiadm login failed for target $iqn on $portal",
-    );
 }
 
 # ── PVE::Storage::Plugin interface ───────────────────────────────────────────
@@ -367,10 +374,6 @@ sub parse_volname {
 sub status {
     my ($class, $storeid, $scfg, $cache) = @_;
 
-    # Query the root dataset for space stats — works on both CORE and SCALE.
-    # TrueNAS CORE 13.0 /pool does not expose top-level size/free/allocated;
-    # those fields are nested inside topology.  /pool/dataset has available.parsed
-    # and used.parsed at the root dataset level on all versions.
     my $pool_name = (split m{/}, $scfg->{truenas_pool})[0];
     my $datasets  = _api($scfg, 'GET', "/pool/dataset?id=$pool_name") // [];
     my ($ds)      = grep { $_->{name} eq $pool_name } @$datasets;
@@ -394,17 +397,17 @@ sub alloc_image {
     my $zvol   = "$prefix/$name";
     my $size_b = $size_kb * 1024;
 
-    _log('info', "alloc_image: creating zvol $zvol ($size_b bytes)");
+    _log('info', "alloc_image: creating zvol $zvol ($size_b bytes) for VM $vmid");
 
     # 1. Create the zvol
     _api($scfg, 'POST', '/pool/dataset', {
-        name   => $zvol,
-        type   => 'VOLUME',
+        name    => $zvol,
+        type    => 'VOLUME',
         volsize => $size_b,
-        sparse => JSON::true,
+        sparse  => JSON::true,
     });
 
-    # 2. Create the iSCSI extent pointing at the new zvol
+    # 2. Create the iSCSI extent
     my $extent = _api($scfg, 'POST', '/iscsi/extent', {
         name => $name,
         type => 'DISK',
@@ -412,8 +415,8 @@ sub alloc_image {
         ro   => JSON::false,
     });
 
-    # 3. Associate the extent with the target at the next available LUN ID
-    my $target = _resolve_target($scfg);
+    # 3. Associate extent with the per-VM target
+    my $target = _resolve_vm_target($scfg, $vmid);
     my $lun_id = _next_lun_id($scfg, $target->{id});
 
     _api($scfg, 'POST', '/iscsi/targetextent', {
@@ -424,40 +427,8 @@ sub alloc_image {
 
     _reload_iscsi($scfg);
 
-    _log('info', "alloc_image: $name ready at lun $lun_id");
+    _log('info', "alloc_image: $name ready at lun $lun_id on $target->{iqn}");
     return $name;
-}
-
-# Returns a list of VMIDs that are currently running and have at least one
-# disk on the given storage. Used to gate the service-stop fallback path.
-sub _running_vms_on_storage {
-    my ($storeid) = @_;
-    my @blocking;
-    my $cfgdir = '/etc/pve/qemu-server';
-    opendir(my $dh, $cfgdir) or return ();
-    while (my $f = readdir($dh)) {
-        next unless $f =~ /^(\d+)\.conf$/;
-        my $vmid = $1;
-        # Check running first (cheap) — PID file exists and process is alive
-        my $pidfile = "/var/run/qemu-server/$vmid.pid";
-        next unless -f $pidfile;
-        open(my $pf, '<', $pidfile) or next;
-        my $pidraw = <$pf>;
-        close($pf);
-        my ($pid) = ($pidraw // '') =~ /^(\d+)/;  # untaint for taint-mode Perl
-        next unless $pid && kill(0, $pid);
-        # VM is running — check if it uses this storage
-        open(my $cf, '<', "$cfgdir/$f") or next;
-        while (<$cf>) {
-            if (/^\w+:\s+\Q$storeid\E:/) {
-                push @blocking, $vmid;
-                last;
-            }
-        }
-        close($cf);
-    }
-    closedir($dh);
-    return @blocking;
 }
 
 sub free_image {
@@ -465,72 +436,29 @@ sub free_image {
 
     _log('info', "free_image: removing $volname");
 
+    # Refuse if the disk's owning VM is still running — QEMU still holds an
+    # iSCSI connection to the per-VM target, so extent DELETE would be blocked.
+    my ($vmid) = $volname =~ /^(?:vm|base)-(\d+)-/;
+    if ($vmid && _vm_is_running($vmid)) {
+        die "free_image: cannot delete '$volname' — VM $vmid is still running. "
+          . "Stop the VM first.\n";
+    }
+
     my $ext = _find_extent($scfg, $volname);
 
     if ($ext) {
-        # Fast path: DELETE extent with force=true — TrueNAS v2.0 API cascades
-        # the targetextent association automatically on success.
-        my $deleted = 0;
-        eval { _api($scfg, 'DELETE', "/iscsi/extent/id/$ext->{extent_id}",
-                    { force => JSON::true }) };
-        if (!$@) {
-            $deleted = 1;
-        } elsif (defined $ext->{targetextent_id}) {
-            # force=true is ignored by TrueNAS CORE 13 — unconditional session check.
-            # The only reliable delete window requires stopping the TrueNAS iSCSI
-            # service entirely, which disrupts ALL LUNs on ALL targets. Refuse if
-            # any other VM on this node has disks on this storage and is running —
-            # stopping the service would cause io-error on those VMs.
-            my @blocking = _running_vms_on_storage($storeid);
-            die "free_image: cannot delete '$volname' while other VMs are running on "
-              . "storage '$storeid': VM(s) " . join(', ', map { "#$_" } @blocking)
-              . ". Stop those VMs first, then retry.\n"
-                if @blocking;
+        # With per-VM targets and iscsi:// paths, QEMU's libiscsi connection
+        # closes when the VM stops.  TrueNAS sees no active session on the
+        # VM's target, so force=true succeeds without stopping the service.
+        eval {
+            _api($scfg, 'DELETE', "/iscsi/extent/id/$ext->{extent_id}",
+                 { force => JSON::true });
+        };
+        die "free_image: could not delete iSCSI extent for '$volname': $@\n" if $@;
 
-            _log('warning', "free_image: force delete failed — using service-stop fallback");
-
-            my $target = _resolve_target($scfg);
-            my $portal = _portal($scfg);
-            my $iqn    = $target->{iqn};
-
-            # Prevent iscsid from auto-reconnecting during the delete window
-            eval { run_command(['iscsiadm', '-m', 'node', '-T', $iqn,
-                                '-p', "$portal:3260", '--op', 'update',
-                                '-n', 'node.startup', '-v', 'manual'], noerr => 1) };
-            eval { run_command(['iscsiadm', '-m', 'node', '-T', $iqn,
-                                '-p', "$portal:3260", '--logout'], noerr => 1) };
-
-            # Stop the service and wait up to 15s for it to actually stop
-            eval { _api($scfg, 'POST', '/service/stop', { service => 'iscsitarget' }) };
-            for my $i (1..15) {
-                my $svc = _api($scfg, 'GET', '/service?service=iscsitarget') // [];
-                my ($s) = grep { ($_->{service} // '') eq 'iscsitarget' } @$svc;
-                last if $s && !$s->{state};
-                sleep 1;
-            }
-
-            my $deleted_te = 0;
-            eval { _api($scfg, 'DELETE', "/iscsi/targetextent/id/$ext->{targetextent_id}") };
-            $deleted_te = 1 unless $@;
-            _log('warning', "free_image: targetextent delete failed: $@") if $@;
-
-            eval { _api($scfg, 'DELETE', "/iscsi/extent/id/$ext->{extent_id}") };
-            $deleted = 1 unless $@;
-            _log('warning', "free_image: extent delete failed: $@") if $@;
-
-            # Restart the service and restore the session
-            eval { _api($scfg, 'POST', '/service/start', { service => 'iscsitarget' }) };
-            eval { run_command(['iscsiadm', '-m', 'node', '-T', $iqn,
-                                '-p', "$portal:3260", '--op', 'update',
-                                '-n', 'node.startup', '-v', 'automatic'], noerr => 1) };
-            eval { run_command(['iscsiadm', '-m', 'discovery', '-t', 'sendtargets',
-                                '-p', "$portal:3260"], noerr => 1) };
-            eval { run_command(['iscsiadm', '-m', 'node', '-T', $iqn,
-                                '-p', "$portal:3260", '--login'], noerr => 1) };
-            eval { run_command(['iscsiadm', '-m', 'session', '--rescan'], noerr => 1) };
-        }
-        die "free_image: could not delete extent $ext->{extent_id} after retries\n"
-            unless $deleted;
+        # Remove the per-VM target if this was its last disk
+        _maybe_cleanup_vm_target($scfg, $vmid, $ext->{target_id})
+            if $vmid && defined $ext->{target_id};
     } else {
         _log('warning', "free_image: no iSCSI extent found for $volname — skipping extent removal");
     }
@@ -554,11 +482,9 @@ sub list_images {
     for my $ds (@$datasets) {
         my $name = $ds->{name} // '';
 
-        # Keep only zvols directly under our prefix
         next unless $name =~ s{^\Q$prefix\E/}{};
-        next if $name =~ m{/};    # skip nested datasets
+        next if $name =~ m{/};
 
-        # Must match PVE volume naming: vm-<vmid>-<rest> or base-<vmid>-<rest>
         next unless $name =~ /^(?:vm|base|subvol)-(\d+)-/;
         my $ds_vmid = $1 + 0;
 
@@ -585,8 +511,6 @@ sub list_images {
 sub volume_size_info {
     my ($class, $scfg, $storeid, $volname, $timeout) = @_;
 
-    # The base class volume_size_info calls filesystem_path() which calls
-    # get_subdir() which dies on block storage. Query TrueNAS directly instead.
     my $zvol = _zvol_prefix($scfg) . "/$volname";
     my $enc  = uri_escape($zvol, "^A-Za-z0-9\\-_.~");
     my $ds   = _api($scfg, 'GET', "/pool/dataset/id/$enc") // {};
@@ -600,69 +524,47 @@ sub path {
     die "Volume '$volname' has no iSCSI extent on $scfg->{truenas_host}. "
       . "Was it created via this plugin?\n" unless $ext;
 
-    my $target = _resolve_target($scfg);
-    my $dev    = _dev_path(_portal($scfg), $target->{iqn}, $ext->{lun_id});
+    die "Volume '$volname' is not mapped to any iSCSI target.\n"
+        unless defined $ext->{target_id};
+
+    # Look up the target that owns this extent (per-VM or legacy shared)
+    my $t        = _api($scfg, 'GET', "/iscsi/target/id/$ext->{target_id}") // {};
+    my $iqn      = _basename($scfg) . ":$t->{name}";
+    my $portal   = _portal($scfg);
+    my $dev_path = "iscsi://$portal/$iqn/$ext->{lun_id}";
 
     my ($vtype, undef, $ds_vmid) = $class->parse_volname($volname);
-    return ($dev, $ds_vmid, $vtype);
+    return ($dev_path, $ds_vmid, $vtype);
 }
 
 sub activate_storage {
     my ($class, $storeid, $scfg, $cache) = @_;
-
-    # Warm up target cache and verify API reachability
-    _resolve_target($scfg);
-
-    _iscsi_ensure_session($scfg);
-
+    # Verify API reachability and warm up the global config cache
+    _api_global($scfg);
     _log('info', "activate_storage: $storeid online");
     return 1;
 }
 
 sub deactivate_storage {
     my ($class, $storeid, $scfg, $cache) = @_;
-
-    my $host   = $scfg->{truenas_host};
-    my $target = $state->{$host}{target};
-
-    if ($target) {
-        my $portal = _portal($scfg);
-        eval {
-            run_command(
-                ['iscsiadm', '-m', 'node', '-T', $target->{iqn},
-                 '-p', "$portal:3260", '--logout'],
-                noerr => 1,
-            );
-        };
-    }
-
-    delete $state->{$host};
+    delete $state->{$scfg->{truenas_host}};
     _log('info', "deactivate_storage: $storeid offline");
     return 1;
 }
 
 sub activate_volume {
     my ($class, $storeid, $scfg, $volname, $snapname, $cache) = @_;
-
-    # Reconnect if the session dropped (e.g. after a node reboot)
-    _iscsi_ensure_session($scfg);
-
+    # QEMU connects via iscsi:// (libiscsi) — no iscsiadm session needed here.
+    # Just verify the extent exists so we catch config errors early.
     my $ext = _find_extent($scfg, $volname);
     die "Volume '$volname' has no iSCSI extent — was it created via this plugin?\n"
         unless $ext;
-
-    my $target = _resolve_target($scfg);
-    my $dev    = _dev_path(_portal($scfg), $target->{iqn}, $ext->{lun_id});
-
-    _wait_for_device($dev);
-
-    _log('info', "activate_volume: $volname ready at $dev (lun $ext->{lun_id})");
+    _log('info', "activate_volume: $volname (lun $ext->{lun_id}) ready");
     return 1;
 }
 
 sub deactivate_volume {
     my ($class, $storeid, $scfg, $volname, $snapname, $cache) = @_;
-    # Session lifecycle managed at storage level — nothing to do per-volume
     return 1;
 }
 
