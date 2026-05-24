@@ -430,9 +430,18 @@ sub free_image {
     my $ext = _find_extent($scfg, $volname);
 
     if ($ext) {
-        # force=true tells TrueNAS to disconnect any remaining iSCSI session
-        # before deleting.  For detached disks on a running VM, QEMU has
-        # already closed the libiscsi connection, so this is a no-op safety net.
+        # Step 1: unmap the LUN from the target.  This must happen before the
+        # extent delete when the per-VM target still has other LUNs with active
+        # sessions (e.g. migrating one disk while the VM is running with others).
+        # Removing the targetextent severs just this LUN's association without
+        # touching the target session or other LUNs.
+        if (defined $ext->{targetextent_id}) {
+            eval { _api($scfg, 'DELETE', "/iscsi/targetextent/id/$ext->{targetextent_id}") };
+            _log('warning', "free_image: could not remove targetextent $ext->{targetextent_id}: $@") if $@;
+        }
+
+        # Step 2: delete the extent.  force=true handles any residual session
+        # on a single-disk per-VM target (e.g. deleting a detached disk).
         eval {
             _api($scfg, 'DELETE', "/iscsi/extent/id/$ext->{extent_id}",
                  { force => JSON::true });
