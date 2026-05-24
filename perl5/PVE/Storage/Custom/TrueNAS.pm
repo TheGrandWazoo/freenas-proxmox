@@ -88,7 +88,7 @@ sub options {
         bwlimit            => { optional => 1 },
         shared             => { optional => 1 },
         truenas_host       => { fixed    => 1 },
-        truenas_api_key    => {},
+        truenas_api_key    => { optional => 1 },
         truenas_ssl        => { optional => 1 },
         truenas_ssl_verify => { optional => 1 },
         truenas_pool       => { fixed    => 1 },
@@ -127,6 +127,9 @@ sub _ua {
 # Returns decoded JSON hashref/arrayref, or undef for empty 204 responses.
 sub _api {
     my ($scfg, $method, $path, $data) = @_;
+
+    die "TrueNAS API key is not configured for storage '$scfg->{truenas_host}'\n"
+        unless $scfg->{truenas_api_key};
 
     my $scheme = ($scfg->{truenas_ssl} // 1) ? 'https' : 'http';
     my $url    = "$scheme://$scfg->{truenas_host}/api/v2.0$path";

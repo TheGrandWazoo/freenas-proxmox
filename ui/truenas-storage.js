@@ -5,6 +5,19 @@
 //
 // Loaded by index.html.tpl after pvemanagerlib.js, so PVE.Utils is available.
 
+// Inject CSS for the API key reveal trigger (eye icon via Font Awesome)
+(function () {
+    let style = document.createElement('style');
+    style.textContent = [
+        '.truenas-reveal-trigger::before {',
+        '    font-family: "Font Awesome 5 Free";',
+        '    font-weight: 900;',
+        '    content: "\\f06e";',  // fa-eye
+        '}',
+    ].join('');
+    document.head.appendChild(style);
+}());
+
 // Register TrueNAS in the storage type dropdown
 PVE.Utils.storageSchema.truenas = {
     name: 'TrueNAS (ZFS/iSCSI)',
@@ -26,6 +39,9 @@ Ext.define('PVE.storage.TrueNASInputPanel', {
                 fieldLabel: gettext('TrueNAS Host'),
                 name: 'truenas_host',
                 allowBlank: false,
+                autoComplete: false,
+                // 'url' misdirects browser autofill away from username heuristics
+                inputAttrTpl: 'autocomplete="url"',
                 emptyText: gettext('hostname or IP address'),
             },
             {
@@ -34,9 +50,22 @@ Ext.define('PVE.storage.TrueNASInputPanel', {
                 name: 'truenas_api_key',
                 inputType: 'password',
                 allowBlank: !me.isCreate,
+                autoComplete: false,
+                // 'new-password' prevents browser from filling a saved password here
+                inputAttrTpl: 'autocomplete="new-password"',
                 emptyText: me.isCreate
                     ? gettext('Paste API key from TrueNAS UI')
                     : gettext('unchanged — paste new key to change'),
+                triggers: {
+                    reveal: {
+                        cls: 'truenas-reveal-trigger',
+                        tooltip: gettext('Show / hide API key'),
+                        handler: function (field) {
+                            let dom = field.inputEl.dom;
+                            dom.type = dom.type === 'password' ? 'text' : 'password';
+                        },
+                    },
+                },
                 listeners: {
                     // On edit: don't submit unless the user types a new value
                     afterrender: function (field) {
@@ -56,6 +85,7 @@ Ext.define('PVE.storage.TrueNASInputPanel', {
                 fieldLabel: gettext('Pool'),
                 name: 'truenas_pool',
                 allowBlank: false,
+                autoComplete: false,
                 emptyText: gettext('ZFS pool name (e.g. tank)'),
             },
             {
@@ -63,6 +93,7 @@ Ext.define('PVE.storage.TrueNASInputPanel', {
                 fieldLabel: gettext('Dataset'),
                 name: 'truenas_dataset',
                 allowBlank: true,
+                autoComplete: false,
                 emptyText: gettext('Optional (e.g. proxmox)'),
                 deleteEmpty: !me.isCreate,
             },
@@ -90,6 +121,7 @@ Ext.define('PVE.storage.TrueNASInputPanel', {
                 fieldLabel: gettext('Portal IP'),
                 name: 'truenas_portal_ip',
                 allowBlank: true,
+                autoComplete: false,
                 emptyText: gettext('Optional — defaults to TrueNAS host'),
                 deleteEmpty: !me.isCreate,
             },
@@ -98,6 +130,7 @@ Ext.define('PVE.storage.TrueNASInputPanel', {
                 fieldLabel: gettext('Target IQN'),
                 name: 'truenas_target',
                 allowBlank: true,
+                autoComplete: false,
                 emptyText: gettext('Optional — auto-discovered if blank'),
                 deleteEmpty: !me.isCreate,
             },
