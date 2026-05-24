@@ -1,6 +1,6 @@
 # Perl::Critic configuration for freenas-proxmox
 # Severity scale: 1 (brutal) → 5 (gentle). We start at 4 and tighten over time.
-# Run: perlcritic --profile .perlcriticrc perl5/PVE/Storage/LunCmd/FreeNAS.pm
+# Run: perlcritic --profile .perlcriticrc perl5/PVE/Storage/Custom/TrueNAS.pm
 
 severity  = 4
 theme     = core
@@ -10,16 +10,16 @@ verbose   = %f:%l:%c  [%p] %m\n
 # These are known issues being fixed in Phase 2 (code hardening).
 # Remove entries here as the underlying code is fixed.
 
-# eval $value pattern — being replaced with explicit substitution map (Phase 2)
+# eval { } block is fine; only string eval is risky — keep disabled
 [-BuiltinFunctions::ProhibitStringyEval]
 
 # Postfix conditionals (if/unless at end of line) — style preference, keep
 [-ControlStructures::ProhibitPostfixControls]
 
-# Long subs — FreeNAS.pm has some; will be refactored in Phase 3
+# TrueNAS.pm has necessarily large subs (PVE plugin interface methods)
 [-Subroutines::ProhibitExcessComplexity]
 
-# Global variables — known issue, fixing in Phase 2
+# our $VERSION and our $state are intentional package-level declarations
 [-Variables::ProhibitPackageVars]
 
 # ── Rules with custom settings ────────────────────────────────────────────────
