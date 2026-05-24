@@ -45,7 +45,7 @@ Proxmox VE's built-in ZFS-over-iSCSI storage type uses SSH to manage LUNs on the
 
 | Plugin Version | Proxmox VE | TrueNAS CORE | TrueNAS SCALE | Status |
 |:--------------:|:----------:|:------------:|:-------------:|:------:|
-| **3.x** *(upcoming)* | 8.x, 9.x | 13.0-U6+ | Cobia (23.10)+, Dragonfish (24.04)+ | In development |
+| **3.x** *(upcoming)* | 8.x, 9.x | 13.0-U6+ ✅ | Electric Eel (24.10)+ ✅, Cobia (23.10)+, Dragonfish (24.04)+ | In development |
 | **2.x** *(current)* | 7.x ⚠️, 8.0–8.3 ✅, 8.4.x ✅ | 11.3+ | 22.02+ | Active |
 | **1.x** *(legacy)* | 5.x, 6.x | 11.x | — | Unsupported |
 
