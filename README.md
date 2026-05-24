@@ -77,16 +77,28 @@ Check the [Releases page](https://github.com/TheGrandWazoo/freenas-proxmox/relea
 
 ## Prerequisites
 
-Before installing, ensure the following are in place on your **Proxmox VE node**:
+### v3.0 (upcoming)
+
+v3.0 is a fully API-driven custom storage plugin. No SSH keys required.
+
+1. On **TrueNAS**, ensure the iSCSI service is running and an iSCSI **portal** and **initiator group** are configured. The plugin creates per-VM iSCSI targets automatically — you do not need to pre-create a target.
+
+2. Generate a TrueNAS API key:
+   - TrueNAS SCALE: *System Settings → API Keys → Add*
+   - TrueNAS CORE 13: *gear icon (top-right) → API Keys → Add*
+
+   Copy the key — you will need it during storage configuration in Proxmox.
+
+### v2.x (current stable)
 
 1. **SSH keys** configured between Proxmox and TrueNAS — required for ZFS pool listing by the Proxmox core (see the [Proxmox wiki](https://pve.proxmox.com/wiki/Storage:_ZFS_over_iSCSI), section starting with `mkdir /etc/pve/priv/zfs`).
 
-2. On **TrueNAS**, an iSCSI target and initiator group must exist and be configured. The plugin manages extents and target-to-extent mappings, but the target itself must be pre-created.
+2. On **TrueNAS**, an iSCSI **target** and **initiator group** must exist and be configured. The plugin manages extents and target-to-extent mappings, but the target itself must be pre-created.
 
 3. On **TrueNAS SCALE** or **TrueNAS CORE 13+**, generate an API key:
    - TrueNAS SCALE: *System Settings → API Keys → Add*
    - TrueNAS CORE 13: *gear icon (top-right) → API Keys → Add*
-   
+
    Copy the key — you will need it during storage configuration in Proxmox.
 
 ---
