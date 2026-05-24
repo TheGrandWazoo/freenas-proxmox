@@ -309,17 +309,6 @@ sub _maybe_cleanup_vm_target {
 }
 
 # Returns true if the QEMU process for $vmid is alive.
-sub _vm_is_running {
-    my ($vmid) = @_;
-    my $pidfile = "/var/run/qemu-server/$vmid.pid";
-    return 0 unless -f $pidfile;
-    open(my $pf, '<', $pidfile) or return 0;
-    my $pidraw = <$pf>;
-    close($pf);
-    my ($pid) = ($pidraw // '') =~ /^(\d+)/;    # untaint for -T
-    return ($pid && kill(0, $pid)) ? 1 : 0;
-}
-
 # Returns the next unused LUN ID on the given target
 sub _next_lun_id {
     my ($scfg, $target_id) = @_;
@@ -436,20 +425,14 @@ sub free_image {
 
     _log('info', "free_image: removing $volname");
 
-    # Refuse if the disk's owning VM is still running — QEMU still holds an
-    # iSCSI connection to the per-VM target, so extent DELETE would be blocked.
     my ($vmid) = $volname =~ /^(?:vm|base)-(\d+)-/;
-    if ($vmid && _vm_is_running($vmid)) {
-        die "free_image: cannot delete '$volname' — VM $vmid is still running. "
-          . "Stop the VM first.\n";
-    }
 
     my $ext = _find_extent($scfg, $volname);
 
     if ($ext) {
-        # With per-VM targets and iscsi:// paths, QEMU's libiscsi connection
-        # closes when the VM stops.  TrueNAS sees no active session on the
-        # VM's target, so force=true succeeds without stopping the service.
+        # force=true tells TrueNAS to disconnect any remaining iSCSI session
+        # before deleting.  For detached disks on a running VM, QEMU has
+        # already closed the libiscsi connection, so this is a no-op safety net.
         eval {
             _api($scfg, 'DELETE', "/iscsi/extent/id/$ext->{extent_id}",
                  { force => JSON::true });
