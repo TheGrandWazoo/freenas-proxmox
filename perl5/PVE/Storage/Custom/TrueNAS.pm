@@ -1,255 +1,550 @@
 package PVE::Storage::Custom::TrueNASPlugin;
 
+# TrueNAS Custom Storage Plugin for Proxmox VE
+#
+# Manages ZFS volumes over iSCSI via the TrueNAS REST API.
+# Discovered automatically by PVE — no patches to system files required.
+#
+# Supports: TrueNAS CORE 13.x, TrueNAS SCALE <= 24.10 (REST API v2.0)
+# Auth:     Bearer token (API key) only — basic auth removed in v3.0
+# iSCSI:    iscsiadm on PVE host for session login/logout (unavoidable)
+
 use strict;
 use warnings;
-use Data::Dumper;
-use IO::File;
-use PVE::Tools qw(run_command trim file_read_firstline dir_glob_foreach);
+
+use JSON            qw(encode_json decode_json);
+use LWP::UserAgent  ();
+use HTTP::Request   ();
+use URI::Escape     qw(uri_escape);
+use Sys::Syslog     qw(syslog);
+
+use PVE::Tools          qw(run_command);
 use PVE::Storage::Plugin;
-use PVE::JSONSchema qw(get_standard_option);
-use PVE::Cluster qw(cfs_read_file cfs_write_file cfs_lock_file);
-use LWP::UserAgent;
-use HTTP::Request;
-use XML::Simple;
 
 use base qw(PVE::Storage::Plugin);
 
-# Configuration
+# Per-host runtime state cache: { $host => { ua, target => { id, iqn } } }
+my $state = {};
 
-# API version
-sub api {
-    return 1;
-}
+# ── Plugin identity ───────────────────────────────────────────────────────────
 
-sub type {
-    return 'truenas';
-}
+sub api  { return 10; }
+sub type { return 'truenas'; }
 
 sub plugindata {
     return {
-    content => [ {images => 1}, { images => 1 }],
+        content => [ { images => 1, rootdir => 1 }, { images => 1 } ],
+        format  => [ { raw    => 1 },               'raw'           ],
+        'sensitive-properties' => { truenas_api_key => 1 },
     };
 }
 
 sub properties {
     return {
-    freenas_user => {
-        description => "FreeNAS API Username",
-        type => 'string',
-    },
-    freenas_password => {
-        description => "FreeNAS API Password",
-        type => 'string',
-    },
-    freenas_use_ssl => {
-        description => "FreeNAS API access via SSL",
-        type => 'boolean',
-    },
-    freenas_apiv4_host => {
-        description => "FreeNAS API Host",
-        type => 'string',
-    },
-    # this will disable write caching on comstar and istgt.
-    # it is not implemented for iet. iet blockio always operates with
-    # writethrough caching when not in readonly mode
-    nowritecache => {
-        description => "disable write caching on the target",
-        type => 'boolean',
-    },
+        truenas_host => {
+            description => "TrueNAS hostname or IP address",
+            type        => 'string',
+        },
+        truenas_api_key => {
+            description => "TrueNAS API key (Bearer token — generate in TrueNAS UI under Credentials > API Keys)",
+            type        => 'string',
+        },
+        truenas_ssl => {
+            description => "Use HTTPS for TrueNAS API (recommended)",
+            type        => 'boolean',
+            default     => 1,
+        },
+        truenas_ssl_verify => {
+            description => "Verify TrueNAS SSL certificate (disable for self-signed certs)",
+            type        => 'boolean',
+            default     => 0,
+        },
+        truenas_pool => {
+            description => "ZFS pool name on TrueNAS (e.g. 'tank')",
+            type        => 'string',
+        },
+        truenas_dataset => {
+            description => "Dataset path within the pool for volume storage (e.g. 'proxmox'). Optional.",
+            type        => 'string',
+        },
+        truenas_portal_ip => {
+            description => "iSCSI portal IP address. Defaults to truenas_host if not set.",
+            type        => 'string',
+        },
+        truenas_target => {
+            description => "iSCSI target IQN. Leave blank to auto-discover from TrueNAS API.",
+            type        => 'string',
+        },
     };
 }
 
 sub options {
     return {
-    nodes => { optional => 1 },
-    disable => { optional => 1 },
-    portal => { fixed => 1 },
-    target => { fixed => 0 },
-    pool => { fixed => 0 },
-    blocksize => { fixed => 1 },
-    iscsiprovider => { fixed => 1 },
-    nowritecache => { optional => 1 },
-    sparse => { optional => 1 },
-    freenas_user => { optional => 1 },
-    freenas_password => { optional => 1 },
-    freenas_use_ssl => { optional => 1 },
-    freenas_apiv4_host => { optional => 1 },
-    content => { optional => 1 },
-    bwlimit => { optional => 1 },
+        nodes              => { optional => 1 },
+        disable            => { optional => 1 },
+        content            => { optional => 1 },
+        bwlimit            => { optional => 1 },
+        shared             => { optional => 1 },
+        truenas_host       => { fixed    => 1 },
+        truenas_api_key    => {},
+        truenas_ssl        => { optional => 1 },
+        truenas_ssl_verify => { optional => 1 },
+        truenas_pool       => { fixed    => 1 },
+        truenas_dataset    => { optional => 1 },
+        truenas_portal_ip  => { optional => 1 },
+        truenas_target     => { optional => 1 },
     };
 }
 
-sub properties {
-    return {
-    adminserver => {
-        description => "Management IP or DNS name of storage.",
-        type => 'string', format => 'pve-storage-server',
-    },
-    login => {
-        description => "login",
-        type => 'string',
-    },
-    password => {
-        description => "password",
-        type => 'string',
-    },
-    igroup => {
-        description => "Initiator group name",
-        type => 'string',
-    },
-    api => {
-        description => "API version (7 or 8)",
-        type => 'string',
-    },
-    media => {
-        description => "iscsi/multipath",
-        type => 'string',
-        default => 'multipath',
-        enum => ['iscsi', 'multipath'],
-    },
-    efficiency => {
-        description => "Enable Storage Efficiency",
-        type => 'boolean',
-    },
-    };
+# ── Private: logging ──────────────────────────────────────────────────────────
+
+sub _log {
+    my ($level, $msg) = @_;
+    syslog($level, "TrueNASPlugin: $msg");
 }
 
-sub options {
-    return {
-    adminserver => { fixed => 1 },
-    login => { fixed => 1 },
-    password => { optional => 1 },
-    vserver => { optional => 1 },
-    aggregate => { fixed => 1 },
-        nodes => { optional => 1 },
-    disable => { optional => 1 },
-    content => { optional => 1 },
-    igroup => { optional => 1 },
-    api => { optional => 1 },
-    media => { optional => 1 },
-    target => { optional => 1 },
-    shared => { optional => 1 },
-    efficiency => { optional => 1 },
+# ── Private: HTTP/API helpers ─────────────────────────────────────────────────
+
+sub _ua {
+    my ($scfg) = @_;
+    my $host = $scfg->{truenas_host};
+    unless ($state->{$host}{ua}) {
+        my $ua = LWP::UserAgent->new(timeout => 30);
+        if ($scfg->{truenas_ssl} // 1) {
+            unless ($scfg->{truenas_ssl_verify} // 0) {
+                $ua->ssl_opts(verify_hostname => 0, SSL_verify_mode => 0);
+            }
+        }
+        $state->{$host}{ua} = $ua;
     }
+    return $state->{$host}{ua};
 }
 
-sub truenas_connect {
+# Make a TrueNAS REST API v2.0 call.
+# Dies with a descriptive message on HTTP error.
+# Returns decoded JSON hashref/arrayref, or undef for empty 204 responses.
+sub _api {
+    my ($scfg, $method, $path, $data) = @_;
+
+    my $scheme = ($scfg->{truenas_ssl} // 1) ? 'https' : 'http';
+    my $url    = "$scheme://$scfg->{truenas_host}/api/v2.0$path";
+
+    my $req = HTTP::Request->new(uc($method) => $url);
+    $req->header('Content-Type'  => 'application/json');
+    $req->header('Accept'        => 'application/json');
+    $req->header('Authorization' => "Bearer $scfg->{truenas_api_key}");
+    $req->content(encode_json($data)) if defined $data;
+
+    my $res = _ua($scfg)->request($req);
+
+    unless ($res->is_success) {
+        my $detail = '';
+        eval {
+            my $body = decode_json($res->content);
+            $detail = " — $body->{message}" if ref $body eq 'HASH' && $body->{message};
+        };
+        my $msg = "TrueNAS API $method $path: " . $res->status_line . $detail;
+        _log('err', $msg);
+        die "$msg\n";
+    }
+
+    my $content = $res->content // '';
+    return undef unless length($content);
+    return decode_json($content);
+}
+
+# ── Private: TrueNAS domain helpers ──────────────────────────────────────────
+
+# Returns the zvol parent dataset path: "pool" or "pool/dataset"
+sub _zvol_prefix {
+    my ($scfg) = @_;
+    my $prefix = $scfg->{truenas_pool};
+    $prefix .= "/$scfg->{truenas_dataset}" if $scfg->{truenas_dataset};
+    return $prefix;
+}
+
+# Returns the iSCSI portal IP/hostname to use for iscsiadm
+sub _portal {
+    my ($scfg) = @_;
+    return $scfg->{truenas_portal_ip} // $scfg->{truenas_host};
+}
+
+# Resolves and caches { id, iqn } for this storage's iSCSI target.
+# Uses truenas_target if configured; otherwise auto-discovers from the API.
+sub _resolve_target {
+    my ($scfg) = @_;
+    my $host = $scfg->{truenas_host};
+
+    return $state->{$host}{target} if $state->{$host}{target};
+
+    my $targets = _api($scfg, 'GET', '/iscsi/target') // [];
+
+    # Explicit IQN or target name configured
+    if (my $configured = $scfg->{truenas_target}) {
+        for my $t (@$targets) {
+            # Accept full IQN (basename:name) or just the target name portion
+            if ($configured eq $t->{name} || $configured =~ /:\Q$t->{name}\E$/) {
+                $state->{$host}{target} = { id => $t->{id}, iqn => $configured };
+                _log('info', "Using configured iSCSI target: $configured (id=$t->{id})");
+                return $state->{$host}{target};
+            }
+        }
+        die "Configured iSCSI target '$configured' not found on $host. "
+          . "Verify the target name in TrueNAS or update truenas_target.\n";
+    }
+
+    # Auto-discover: find targets reachable via our portal IP
+    my $portal_ip = _portal($scfg);
+    my $portals   = _api($scfg, 'GET', '/iscsi/portal') // [];
+
+    my %our_portal_ids;
+    for my $p (@$portals) {
+        for my $listen (@{$p->{listen} // []}) {
+            my $ip = $listen->{ip} // '';
+            if ($ip eq $portal_ip || $ip eq '0.0.0.0' || $ip eq '::') {
+                $our_portal_ids{$p->{id}} = 1;
+                last;
+            }
+        }
+    }
+
+    unless (%our_portal_ids) {
+        die "No iSCSI portals found listening on $portal_ip on $host. "
+          . "Configure a portal in TrueNAS iSCSI settings or set truenas_portal_ip.\n";
+    }
+
+    my $tgroups = _api($scfg, 'GET', '/iscsi/targetgroup') // [];
+    my %matched_target_ids;
+    for my $g (@$tgroups) {
+        $matched_target_ids{$g->{target}} = 1 if $our_portal_ids{$g->{portal}};
+    }
+
+    my @matched = grep { $matched_target_ids{$_->{id}} } @$targets;
+
+    if (@matched == 0) {
+        die "No iSCSI targets found for portal $portal_ip on $host. "
+          . "Create a target in TrueNAS or set truenas_target.\n";
+    }
+    if (@matched > 1) {
+        my $names = join(', ', map { $_->{name} } @matched);
+        die "Multiple iSCSI targets found for portal $portal_ip on $host: $names. "
+          . "Set truenas_target to specify which one.\n";
+    }
+
+    my $global   = _api($scfg, 'GET', '/iscsi/global') // {};
+    my $basename = $global->{basename} // 'iqn.2005-10.org.freenas.ctl';
+    my $t        = $matched[0];
+    my $iqn      = "$basename:$t->{name}";
+
+    $state->{$host}{target} = { id => $t->{id}, iqn => $iqn };
+    _log('info', "Auto-discovered iSCSI target: $iqn (id=$t->{id})");
+    return $state->{$host}{target};
+}
+
+# Returns the next unused LUN ID on the given target
+sub _next_lun_id {
+    my ($scfg, $target_id) = @_;
+    my $tes  = _api($scfg, 'GET', "/iscsi/targetextent?target=$target_id") // [];
+    my %used = map { $_->{lunid} => 1 } @$tes;
+    my $lun  = 0;
+    $lun++ while $used{$lun};
+    return $lun;
+}
+
+# Returns { extent_id, targetextent_id, lun_id } for a volname, or undef.
+sub _find_extent {
+    my ($scfg, $volname) = @_;
+
+    my $extents = _api($scfg, 'GET', '/iscsi/extent') // [];
+    my ($ext)   = grep { $_->{name} eq $volname } @$extents;
+    return undef unless $ext;
+
+    my $tes  = _api($scfg, 'GET', "/iscsi/targetextent?extent=$ext->{id}") // [];
+    my ($te) = @$tes;
+
+    return {
+        extent_id       => $ext->{id},
+        targetextent_id => defined $te ? $te->{id}    : undef,
+        lun_id          => defined $te ? $te->{lunid} : 0,
+    };
+}
+
+# Signal TrueNAS to reload the iSCSI service so new extents are visible
+sub _reload_iscsi {
+    my ($scfg) = @_;
+    eval { _api($scfg, 'POST', '/service/reload', { service => 'iscsitarget' }) };
+    _log('warning', "iSCSI reload failed (non-fatal): $@") if $@;
+}
+
+# ── Private: iSCSI / iscsiadm helpers ────────────────────────────────────────
+
+# Returns true if an iscsiadm session for the given IQN is already active
+sub _iscsi_session_exists {
+    my ($iqn) = @_;
+    my $out = '';
+    eval {
+        run_command(['iscsiadm', '-m', 'session'],
+                    outfunc => sub { $out .= shift . "\n" },
+                    noerr   => 1);
+    };
+    return $out =~ /\Q$iqn\E/;
+}
+
+# Returns the /dev/disk/by-path path for an iSCSI LUN
+sub _dev_path {
+    my ($portal, $iqn, $lun_id) = @_;
+    return "/dev/disk/by-path/ip-${portal}:3260-iscsi-${iqn}-lun-${lun_id}";
+}
+
+# Waits up to $timeout seconds for a block device node to appear
+sub _wait_for_device {
+    my ($dev_path, $timeout) = @_;
+    $timeout //= 30;
+    for (1 .. $timeout) {
+        return 1 if -b $dev_path;
+        sleep 1;
+    }
+    die "Timed out after ${timeout}s waiting for device $dev_path\n";
+}
+
+# Ensure the iscsiadm session is established for this storage.
+# Runs sendtargets discovery then logs in. Safe to call when already connected.
+sub _iscsi_ensure_session {
     my ($scfg) = @_;
 
-    syslog("info", (caller(0))[3] . " : called");
+    my $target = _resolve_target($scfg);
+    my $portal = _portal($scfg);
+    my $iqn    = $target->{iqn};
 
-    my $scheme = $scfg->{freenas_use_ssl} ? "https" : "http";
-    my $apihost = defined($scfg->{freenas_apiv4_host}) ? $scfg->{freenas_apiv4_host} : $scfg->{portal};
+    return if _iscsi_session_exists($iqn);
 
-    if (! defined $freenas_server_list->{$apihost}) {
-        $freenas_server_list->{$apihost} = REST::Client->new();
-    }
-    $freenas_server_list->{$apihost}->setHost($scheme . '://' . $apihost);
-    $freenas_server_list->{$apihost}->addHeader('Content-Type', 'application/json');
-    $freenas_server_list->{$apihost}->addHeader('Authorization', 'Basic ' . encode_base64($scfg->{freenas_user} . ':' . $scfg->{freenas_password}));
-    # If using SSL, don't verify SSL certs
-    if ($scfg->{freenas_use_ssl}) {
-        $freenas_server_list->{$apihost}->getUseragent()->ssl_opts(verify_hostname => 0);
-        $freenas_server_list->{$apihost}->getUseragent()->ssl_opts(SSL_verify_mode => SSL_VERIFY_NONE);
-    }
-    # Check if the APIs are accessable via the selected host and scheme
-    my $code = $freenas_server_list->{$apihost}->request('GET', $apiping)->responseCode();
-    if ($code == 200) {                # Successful connection
-        syslog("info", (caller(0))[3] . " : REST connection successful to '" . $apihost . "' using the '" . $scheme . "' protocol");
-        $runawayprevent = 0;
-    } elsif ($runawayprevent > 1) {    # Make sure we are not recursion calling.
-        truenas_log_error($freenas_server_list->{$apihost}, "truenas_connect");
-        die "Loop recursion prevention";
-    } elsif ($code == 302) {           # A 302 from FreeNAS means it doesn't like v1.0 APIs.
-        syslog("info", (caller(0))[3] . " : Changing to v2.0 API's");
-        $runawayprevent++;
-        $apiping =~ s/v1\.0/v2\.0/;
-        truenas_connect($scfg);
-    } elsif ($code == 307) {           # A 307 from FreeNAS means rediect http to https.
-        syslog("info", (caller(0))[3] . " : Redirecting to HTTPS protocol");
-        $runawayprevent++;
-        $scfg->{freenas_use_ssl} = 1;
-        truenas_connect($scfg);
-    } else {                           # For now, any other code we fail.
-        truenas_log_error($freenas_server_list->{$apihost}, "truenas_connect");
-        die "Unable to connect to the FreeNAS API service at '" . $apihost . "' using the '" . $scheme . "' protocol";
-    }
-    $freenas_rest_connection = $freenas_server_list->{$apihost};
-    return;
+    _log('info', "Logging in to iSCSI target $iqn via $portal:3260");
+
+    # Discovery populates the node record so --login works on first connect
+    eval {
+        run_command(
+            ['iscsiadm', '-m', 'discovery', '-t', 'sendtargets', '-p', "$portal:3260"],
+            noerr => 1,
+        );
+    };
+
+    run_command(
+        ['iscsiadm', '-m', 'node', '-T', $iqn, '-p', "$portal:3260", '--login'],
+        errmsg => "iscsiadm login failed for target $iqn on $portal",
+    );
 }
 
-#
-# Check to see what FreeNAS version we are running and set
-# the FreeNAS.pm to use the correct API version of FreeNAS
-#
-sub truenas_check {
-    my ($scfg, $timeout) = @_;
-    my $result = {};
-    my $apihost = defined($scfg->{freenas_apiv4_host}) ? $scfg->{freenas_apiv4_host} : $scfg->{portal};
+# ── PVE::Storage::Plugin interface ───────────────────────────────────────────
 
-    syslog("info", (caller(0))[3] . " : called");
+sub status {
+    my ($class, $storeid, $scfg, $cache) = @_;
 
-    if (! defined $freenas_rest_connection->{$apihost}) {
-        truenas_connect($scfg);
-        eval {
-            $result = decode_json($freenas_rest_connection->responseContent());
-        };
-        if ($@) {
-            $result->{'fullversion'} = $freenas_rest_connection->responseContent();
-            $result->{'fullversion'} =~ s/^"//g;
+    my $pools = _api($scfg, 'GET', '/pool') // [];
+    my ($pool) = grep { $_->{name} eq $scfg->{truenas_pool} } @$pools;
+    die "Pool '$scfg->{truenas_pool}' not found on $scfg->{truenas_host}\n" unless $pool;
+
+    my $total = $pool->{size}      // 0;
+    my $free  = $pool->{free}      // 0;
+    my $used  = $pool->{allocated} // ($total - $free);
+
+    return ($total, $free, $used, 1);
+}
+
+sub alloc_image {
+    my ($class, $storeid, $scfg, $vmid, $fmt, $name, $size_kb) = @_;
+
+    die "Unsupported format '$fmt' — only raw is supported\n" if $fmt && $fmt ne 'raw';
+
+    $name //= $class->find_free_diskname($storeid, $scfg, $vmid, 'raw');
+
+    my $prefix = _zvol_prefix($scfg);
+    my $zvol   = "$prefix/$name";
+    my $size_b = $size_kb * 1024;
+
+    _log('info', "alloc_image: creating zvol $zvol ($size_b bytes)");
+
+    # 1. Create the zvol
+    _api($scfg, 'POST', '/pool/dataset', {
+        name   => $zvol,
+        type   => 'VOLUME',
+        volsize => $size_b,
+        sparse => JSON::true,
+    });
+
+    # 2. Create the iSCSI extent pointing at the new zvol
+    my $extent = _api($scfg, 'POST', '/iscsi/extent', {
+        name => $name,
+        type => 'DISK',
+        disk => "zvol/$zvol",
+        ro   => JSON::false,
+    });
+
+    # 3. Associate the extent with the target at the next available LUN ID
+    my $target = _resolve_target($scfg);
+    my $lun_id = _next_lun_id($scfg, $target->{id});
+
+    _api($scfg, 'POST', '/iscsi/targetextent', {
+        target => $target->{id},
+        extent => $extent->{id},
+        lunid  => $lun_id,
+    });
+
+    _reload_iscsi($scfg);
+
+    _log('info', "alloc_image: $name ready at lun $lun_id");
+    return $name;
+}
+
+sub free_image {
+    my ($class, $storeid, $scfg, $volname, $isBase) = @_;
+
+    _log('info', "free_image: removing $volname");
+
+    my $ext = _find_extent($scfg, $volname);
+
+    if ($ext) {
+        if (defined $ext->{targetextent_id}) {
+            _api($scfg, 'DELETE', "/iscsi/targetextent/id/$ext->{targetextent_id}");
         }
-        syslog("info", (caller(0))[3] . " : successful : Server version: " . $result->{'fullversion'});
-        $result->{'fullversion'} =~ s/^(\w+)\-(\d+)\.(\d+)\-(?:U|BETA)(\d?)\.?(\d?)//;
-        my $freenas_version = sprintf("%02d%02d%02d%02d", $2, $3 || 0, $4 || 0, $5 || 0);
-        $product_name = $1;
-        syslog("info", (caller(0))[3] . " : ". $product_name . " Unformatted Version: " . $freenas_version);
-        if ($freenas_version >= 11030100) {
-            $freenas_api_version = "v2.0";
-            $dev_prefix = "/dev/";
-        }
+        _api($scfg, 'DELETE', "/iscsi/extent/id/$ext->{extent_id}");
+        _reload_iscsi($scfg);
     } else {
-        syslog("info", (caller(0))[3] . " : REST Client already initialized");
+        _log('warning', "free_image: no iSCSI extent found for $volname — skipping extent removal");
     }
-    syslog("info", (caller(0))[3] . " : Using " . $product_name ." API version " . $freenas_api_version);
-    $freenas_api_methods   = $freenas_api_version_matrix->{$freenas_api_version}->{'methods'};
-    $freenas_api_variables = $freenas_api_version_matrix->{$freenas_api_version}->{'variables'};
-    $freenas_global_config = $freenas_global_config_list->{$apihost} = (!defined($freenas_global_config_list->{$apihost})) ? freenas_iscsi_get_globalconfiguration($scfg) : $freenas_global_config_list->{$apihost};
-    return;
+
+    # Delete the zvol; recursive handles any leftover snapshots
+    my $zvol    = _zvol_prefix($scfg) . "/$volname";
+    my $zvol_id = uri_escape($zvol, "^A-Za-z0-9\\-_.~");
+    _api($scfg, 'DELETE', "/pool/dataset/id/$zvol_id", { recursive => JSON::true });
+
+    _log('info', "free_image: $volname removed");
+    return undef;
 }
 
+sub list_images {
+    my ($class, $storeid, $scfg, $vmid, $fmt, $ids) = @_;
 
-#
-### FREENAS API CALLING ROUTINE ###
-#
-sub truenas_request {
-    my ($scfg, $method, $path, $data) = @_;
-    my $apihost = defined($scfg->{freenas_apiv4_host}) ? $scfg->{freenas_apiv4_host} : $scfg->{portal};
+    my $prefix   = _zvol_prefix($scfg);
+    my $datasets = _api($scfg, 'GET', '/pool/dataset?type=VOLUME') // [];
 
-    syslog("info", (caller(0))[3] . " : called for host '" . $apihost . "'");
+    my @vols;
+    for my $ds (@$datasets) {
+        my $name = $ds->{name} // '';
 
-    $method = uc($method);
-    if (! $method =~ /^(?>GET|DELETE|POST)$/) {
-        syslog("info", (caller(0))[3] . " : Invalid HTTP RESTful service method '$method'");
-        die "Invalid HTTP RESTful service method '$method' used.";
+        # Keep only zvols directly under our prefix
+        next unless $name =~ s{^\Q$prefix\E/}{};
+        next if $name =~ m{/};    # skip nested datasets
+
+        # Must match PVE volume naming: vm-<vmid>-<rest> or base-<vmid>-<rest>
+        next unless $name =~ /^(?:vm|base|subvol)-(\d+)-/;
+        my $ds_vmid = $1 + 0;
+
+        next if defined $vmid && $ds_vmid != $vmid;
+
+        my $volid = "$storeid:$name";
+        next if $ids && !$ids->{$volid};
+
+        my $size = 0;
+        eval { $size = $ds->{volsize}{parsed} // 0 };
+
+        push @vols, {
+            volid  => $volid,
+            name   => $name,
+            size   => $size,
+            vmid   => $ds_vmid,
+            format => 'raw',
+        };
     }
 
-    if (! defined $freenas_server_list->{$apihost}) {
-        freenas_api_check($scfg);
-    }
-    $freenas_rest_connection = $freenas_server_list->{$apihost};
-    $freenas_global_config = $freenas_global_config_list->{$apihost};
-    my $json_data = (defined $data) ? encode_json($data) : undef;
-    $freenas_rest_connection->$method($path, $json_data);
-    syslog("info", (caller(0))[3] . " : successful");
-    return;
+    return \@vols;
 }
 
-#
-# Writes the Response and Content to SysLog 
-#
-sub freenas_api_log_error {
-    my ($method) = @_;
-    syslog("info","[ERROR]FreeNAS::API::" . $method . " : Response code: " . $freenas_rest_connection->responseCode());
-    syslog("info","[ERROR]FreeNAS::API::" . $method . " : Response content: " . $freenas_rest_connection->responseContent());
+sub path {
+    my ($class, $scfg, $volname, $storeid, $snapname) = @_;
+
+    my $ext = _find_extent($scfg, $volname);
+    die "Volume '$volname' has no iSCSI extent on $scfg->{truenas_host}. "
+      . "Was it created via this plugin?\n" unless $ext;
+
+    my $target = _resolve_target($scfg);
+    my $dev    = _dev_path(_portal($scfg), $target->{iqn}, $ext->{lun_id});
+
+    my ($vtype, undef, $ds_vmid) = $class->parse_volname($volname);
+    return ($dev, $ds_vmid, $vtype);
+}
+
+sub activate_storage {
+    my ($class, $storeid, $scfg, $cache) = @_;
+
+    # Warm up target cache and verify API reachability
+    _resolve_target($scfg);
+
+    _iscsi_ensure_session($scfg);
+
+    _log('info', "activate_storage: $storeid online");
     return 1;
 }
+
+sub deactivate_storage {
+    my ($class, $storeid, $scfg, $cache) = @_;
+
+    my $host   = $scfg->{truenas_host};
+    my $target = $state->{$host}{target};
+
+    if ($target) {
+        my $portal = _portal($scfg);
+        eval {
+            run_command(
+                ['iscsiadm', '-m', 'node', '-T', $target->{iqn},
+                 '-p', "$portal:3260", '--logout'],
+                noerr => 1,
+            );
+        };
+    }
+
+    delete $state->{$host};
+    _log('info', "deactivate_storage: $storeid offline");
+    return 1;
+}
+
+sub activate_volume {
+    my ($class, $storeid, $scfg, $volname, $snapname, $cache) = @_;
+
+    # Reconnect if the session dropped (e.g. after a node reboot)
+    _iscsi_ensure_session($scfg);
+
+    my $ext = _find_extent($scfg, $volname);
+    die "Volume '$volname' has no iSCSI extent — was it created via this plugin?\n"
+        unless $ext;
+
+    my $target = _resolve_target($scfg);
+    my $dev    = _dev_path(_portal($scfg), $target->{iqn}, $ext->{lun_id});
+
+    _wait_for_device($dev);
+
+    _log('info', "activate_volume: $volname ready at $dev (lun $ext->{lun_id})");
+    return 1;
+}
+
+sub deactivate_volume {
+    my ($class, $storeid, $scfg, $volname, $snapname, $cache) = @_;
+    # Session lifecycle managed at storage level — nothing to do per-volume
+    return 1;
+}
+
+sub volume_has_feature {
+    my ($class, $scfg, $feature, $storeid, $volname, $snapname, $running) = @_;
+
+    my $features = {
+        copy     => { base => 1, current => 1 },
+        snapshot => { current => 1 },
+    };
+
+    my ($vtype, undef, undef, undef, undef, $isBase) = $class->parse_volname($volname);
+    my $key = $snapname ? 'snap' : ($isBase ? 'base' : 'current');
+
+    return 1 if $features->{$feature} && $features->{$feature}{$key};
+    return undef;
+}
+
+1;
