@@ -444,24 +444,51 @@ sub free_image {
         if (!$@) {
             $deleted = 1;
         } elsif (defined $ext->{targetextent_id}) {
-            # force=true was not enough (CORE 13 strict session enforcement).
-            # Restart the TrueNAS iSCSI service to purge all server-side session
-            # state, explicitly delete the targetextent (now possible with the
-            # service down), then delete the extent cleanly.
-            _log('warning', "free_image: force delete failed ($@) — falling back to service restart + explicit targetextent delete");
-            for my $attempt (1..5) {
-                eval { _api($scfg, 'POST', '/service/restart', { service => 'iscsitarget' }) };
-                eval { _api($scfg, 'DELETE', "/iscsi/targetextent/id/$ext->{targetextent_id}") };
-                if ($@) {
-                    _log('warning', "free_image: targetextent delete attempt $attempt failed: $@");
-                    sleep $attempt;
-                    next;
-                }
-                eval { _api($scfg, 'DELETE', "/iscsi/extent/id/$ext->{extent_id}") };
-                if (!$@) { $deleted = 1; last; }
-                _log('warning', "free_image: extent delete attempt $attempt failed: $@");
-                sleep $attempt;
+            # force=true is ignored by TrueNAS CORE 13 — unconditional session check.
+            # POST /service/restart is async and iscsid reconnects in milliseconds,
+            # so we must: disable auto-reconnect → logout → wait for service to stop
+            # → delete → re-enable auto-reconnect → login.
+            _log('warning', "free_image: force delete failed — using service-stop fallback");
+
+            my $target = _resolve_target($scfg);
+            my $portal = _portal($scfg);
+            my $iqn    = $target->{iqn};
+
+            # Prevent iscsid from auto-reconnecting during the delete window
+            eval { run_command(['iscsiadm', '-m', 'node', '-T', $iqn,
+                                '-p', "$portal:3260", '--op', 'update',
+                                '-n', 'node.startup', '-v', 'manual'], noerr => 1) };
+            eval { run_command(['iscsiadm', '-m', 'node', '-T', $iqn,
+                                '-p', "$portal:3260", '--logout'], noerr => 1) };
+
+            # Stop the service and wait up to 15s for it to actually stop
+            eval { _api($scfg, 'POST', '/service/stop', { service => 'iscsitarget' }) };
+            for my $i (1..15) {
+                my $svc = _api($scfg, 'GET', '/service?service=iscsitarget') // [];
+                my ($s) = grep { ($_->{service} // '') eq 'iscsitarget' } @$svc;
+                last if $s && !$s->{state};
+                sleep 1;
             }
+
+            my $deleted_te = 0;
+            eval { _api($scfg, 'DELETE', "/iscsi/targetextent/id/$ext->{targetextent_id}") };
+            $deleted_te = 1 unless $@;
+            _log('warning', "free_image: targetextent delete failed: $@") if $@;
+
+            eval { _api($scfg, 'DELETE', "/iscsi/extent/id/$ext->{extent_id}") };
+            $deleted = 1 unless $@;
+            _log('warning', "free_image: extent delete failed: $@") if $@;
+
+            # Restart the service and restore the session
+            eval { _api($scfg, 'POST', '/service/start', { service => 'iscsitarget' }) };
+            eval { run_command(['iscsiadm', '-m', 'node', '-T', $iqn,
+                                '-p', "$portal:3260", '--op', 'update',
+                                '-n', 'node.startup', '-v', 'automatic'], noerr => 1) };
+            eval { run_command(['iscsiadm', '-m', 'discovery', '-t', 'sendtargets',
+                                '-p', "$portal:3260"], noerr => 1) };
+            eval { run_command(['iscsiadm', '-m', 'node', '-T', $iqn,
+                                '-p', "$portal:3260", '--login'], noerr => 1) };
+            eval { run_command(['iscsiadm', '-m', 'session', '--rescan'], noerr => 1) };
         }
         die "free_image: could not delete extent $ext->{extent_id} after retries\n"
             unless $deleted;
