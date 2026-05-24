@@ -37,7 +37,11 @@ sub plugindata {
     return {
         content => [ { images => 1, rootdir => 1 }, { images => 1 } ],
         format  => [ { raw    => 1 },               'raw'           ],
-        'sensitive-properties' => { truenas_api_key => 1 },
+        # sensitive-properties intentionally omitted: PVE strips those keys from
+        # $param before check_config and passes them only to on_add_hook/on_update_hook,
+        # which means activate_storage never sees them.  The API key lives in
+        # storage.cfg (root-readable only, same as the v2.x truenas_secret).
+        # Proper private-key storage via on_add_hook is tracked in issue #247.
     };
 }
 
@@ -88,7 +92,7 @@ sub options {
         bwlimit            => { optional => 1 },
         shared             => { optional => 1 },
         truenas_host       => { fixed    => 1 },
-        truenas_api_key    => { optional => 1 },
+        truenas_api_key    => {},
         truenas_ssl        => { optional => 1 },
         truenas_ssl_verify => { optional => 1 },
         truenas_pool       => { fixed    => 1 },
