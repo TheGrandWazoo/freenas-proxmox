@@ -350,16 +350,18 @@ sub _iscsi_ensure_session {
 sub status {
     my ($class, $storeid, $scfg, $cache) = @_;
 
-    # truenas_pool may be a full dataset path (e.g. tank/proxmox/vdisks).
-    # The /pool API matches on the top-level pool name only.
+    # Query the root dataset for space stats — works on both CORE and SCALE.
+    # TrueNAS CORE 13.0 /pool does not expose top-level size/free/allocated;
+    # those fields are nested inside topology.  /pool/dataset has available.parsed
+    # and used.parsed at the root dataset level on all versions.
     my $pool_name = (split m{/}, $scfg->{truenas_pool})[0];
-    my $pools = _api($scfg, 'GET', '/pool') // [];
-    my ($pool) = grep { $_->{name} eq $pool_name } @$pools;
-    die "Pool '$pool_name' not found on $scfg->{truenas_host}\n" unless $pool;
+    my $datasets  = _api($scfg, 'GET', "/pool/dataset?id=$pool_name") // [];
+    my ($ds)      = grep { $_->{name} eq $pool_name } @$datasets;
+    die "Pool dataset '$pool_name' not found on $scfg->{truenas_host}\n" unless $ds;
 
-    my $total = $pool->{size}      // 0;
-    my $free  = $pool->{free}      // 0;
-    my $used  = $pool->{allocated} // ($total - $free);
+    my $free  = $ds->{available}{parsed} // 0;
+    my $used  = $ds->{used}{parsed}      // 0;
+    my $total = $free + $used;
 
     return ($total, $free, $used, 1);
 }

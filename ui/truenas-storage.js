@@ -104,6 +104,13 @@ Ext.define('PVE.storage.TrueNASInputPanel', {
         me.column2 = [
             {
                 xtype: 'proxmoxcheckbox',
+                fieldLabel: gettext('Shared'),
+                name: 'shared',
+                checked: true,
+                uncheckedValue: 0,
+            },
+            {
+                xtype: 'proxmoxcheckbox',
                 fieldLabel: gettext('Use SSL'),
                 name: 'truenas_ssl',
                 checked: true,
