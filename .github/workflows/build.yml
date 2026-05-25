@@ -9,6 +9,7 @@ on:
 
 env:
   PACKAGE_NAME: freenas-proxmox
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 # Cancel in-flight runs for the same branch on new push
 concurrency:
@@ -21,7 +22,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.3.1
 
       - name: Install lint tools
         run: |
@@ -73,7 +74,7 @@ jobs:
       is_release:      ${{ steps.vars.outputs.is_release }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.3.1
         with:
           fetch-depth: 0
 
@@ -192,7 +193,7 @@ jobs:
     needs: build
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.3.1
 
       - name: Run Trivy (repo scan — secrets + misconfig)
         uses: aquasecurity/trivy-action@master
@@ -233,7 +234,7 @@ jobs:
     if: github.event_name == 'push' && needs.build.outputs.channel != 'none'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.3.1
 
       - name: Download built package
         uses: actions/download-artifact@v4
