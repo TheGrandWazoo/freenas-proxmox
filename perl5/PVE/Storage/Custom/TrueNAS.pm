@@ -113,6 +113,7 @@ sub options {
 sub _log {
     my ($level, $msg) = @_;
     syslog($level, "TrueNASPlugin: $msg");
+    return;
 }
 
 # ── Private: HTTP/API helpers ─────────────────────────────────────────────────
@@ -164,7 +165,7 @@ sub _api {
     }
 
     my $content = $res->content // '';
-    return undef unless length($content);
+    return unless length($content);
     return decode_json($content);
 }
 
@@ -306,6 +307,7 @@ sub _maybe_cleanup_vm_target {
         my $host = $scfg->{truenas_host};
         delete $state->{$host}{vm_targets}{$vmid};
     }
+    return;
 }
 
 # Returns true if the QEMU process for $vmid is alive.
@@ -326,7 +328,7 @@ sub _find_extent {
 
     my $extents = _api($scfg, 'GET', '/iscsi/extent') // [];
     my ($ext)   = grep { $_->{name} eq $volname } @$extents;
-    return undef unless $ext;
+    return unless $ext;
 
     my $tes  = _api($scfg, 'GET', "/iscsi/targetextent?extent=$ext->{id}") // [];
     my ($te) = @$tes;
@@ -344,6 +346,7 @@ sub _reload_iscsi {
     my ($scfg) = @_;
     eval { _api($scfg, 'POST', '/service/reload', { service => 'iscsitarget' }) };
     _log('warning', "iSCSI reload failed (non-fatal): $@") if $@;
+    return;
 }
 
 # ── PVE::Storage::Plugin interface ───────────────────────────────────────────
@@ -461,7 +464,7 @@ sub free_image {
     _api($scfg, 'DELETE', "/pool/dataset/id/$zvol_id", { recursive => JSON::true });
 
     _log('info', "free_image: $volname removed");
-    return undef;
+    return;
 }
 
 sub list_images {
@@ -572,7 +575,7 @@ sub volume_has_feature {
     my $key = $snapname ? 'snap' : ($isBase ? 'base' : 'current');
 
     return 1 if $features->{$feature} && $features->{$feature}{$key};
-    return undef;
+    return;
 }
 
 1;
