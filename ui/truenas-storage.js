@@ -18,6 +18,13 @@
     document.head.appendChild(style);
 }());
 
+// Register our help page in PVE's online help system so the Help button works
+if (typeof pveOnlineHelpInfo !== 'undefined') {
+    pveOnlineHelpInfo['storage_truenas'] = {
+        link: '/pve-docs/truenas-storage.html',
+    };
+}
+
 // Register TrueNAS in the storage type dropdown
 PVE.Utils.storageSchema.truenas = {
     name: 'TrueNAS (ZFS/iSCSI)',
@@ -28,6 +35,7 @@ PVE.Utils.storageSchema.truenas = {
 
 Ext.define('PVE.storage.TrueNASInputPanel', {
     extend: 'PVE.panel.StorageBase',
+    onlineHelp: 'storage_truenas',
 
     initComponent: function () {
         let me = this;

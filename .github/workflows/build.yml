@@ -159,8 +159,9 @@ jobs:
           chmod 0755 "${STAGING}/DEBIAN/postinst" "${STAGING}/DEBIAN/postrm"
 
           # Plugin files (postinst copies these to their final destinations)
-          cp perl5/PVE/Storage/Custom/TrueNAS.pm  "${STAGING}/usr/share/freenas-proxmox/TrueNAS.pm"
-          cp ui/truenas-storage.js                 "${STAGING}/usr/share/freenas-proxmox/truenas-storage.js"
+          cp perl5/PVE/Storage/Custom/TrueNAS.pm      "${STAGING}/usr/share/freenas-proxmox/TrueNAS.pm"
+          cp ui/truenas-storage.js                     "${STAGING}/usr/share/freenas-proxmox/truenas-storage.js"
+          cp ui/truenas-storage-help.html              "${STAGING}/usr/share/freenas-proxmox/truenas-storage-help.html"
 
           echo "==> Package contents:"
           find "${STAGING}" | sort

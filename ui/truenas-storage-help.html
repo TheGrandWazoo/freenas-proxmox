@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrueNAS Storage — Help</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #333;
+    margin: 0;
+    padding: 20px 28px;
+    max-width: 860px;
+  }
+  h1 { font-size: 1.4em; margin: 0 0 4px 0; color: #1a1a1a; }
+  h2 { font-size: 1.05em; margin: 22px 0 8px 0; color: #1a1a1a;
+       border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+  p  { margin: 0 0 10px 0; }
+  ul { margin: 0 0 10px 0; padding-left: 20px; }
+  li { margin-bottom: 4px; }
+  code {
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 0.88em;
+    background: #f4f4f4;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 1px 4px;
+  }
+  pre {
+    background: #f4f4f4;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px 14px;
+    overflow-x: auto;
+    font-size: 0.88em;
+    margin: 0 0 10px 0;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 12px;
+    font-size: 0.93em;
+  }
+  th {
+    background: #f0f0f0;
+    text-align: left;
+    padding: 6px 10px;
+    border: 1px solid #ccc;
+    font-weight: 600;
+  }
+  td {
+    padding: 5px 10px;
+    border: 1px solid #ddd;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #fafafa; }
+  .warn {
+    background: #fff8e1;
+    border-left: 4px solid #f9a825;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    border-radius: 0 4px 4px 0;
+  }
+  .note {
+    background: #e8f5e9;
+    border-left: 4px solid #43a047;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    border-radius: 0 4px 4px 0;
+  }
+  .footer {
+    margin-top: 28px;
+    padding-top: 12px;
+    border-top: 1px solid #ddd;
+    font-size: 0.88em;
+    color: #666;
+  }
+  .footer a { color: #1565c0; }
+</style>
+</head>
+<body>
+
+<h1>TrueNAS (ZFS/iSCSI) Storage</h1>
+<p>Manages TrueNAS ZFS volumes over iSCSI via the TrueNAS REST API.
+Each VM gets its own dedicated iSCSI target — no SSH keys or pre-created targets required.</p>
+
+<h2>Prerequisites</h2>
+<ul>
+  <li>Proxmox VE 8.x or 9.x</li>
+  <li>TrueNAS CORE 13.0-U6+ or TrueNAS SCALE 24.10 (Electric Eel)+</li>
+  <li>iSCSI service enabled on TrueNAS with at least one portal and one initiator group configured</li>
+  <li>TCP 443 (HTTPS API) and TCP 3260 (iSCSI) reachable from every Proxmox node to TrueNAS</li>
+  <li>An API key generated in TrueNAS (System Settings → API Keys)</li>
+</ul>
+
+<div class="warn">
+  <strong>TPM state disks</strong> (<code>tpmstate0</code>) cannot be stored on this storage type.
+  If your VM uses Secure Boot / TPM, store the TPM state disk on <code>local-lvm</code> or NFS.
+  All other disk types (virtio, scsi, IDE, EFI) work normally.
+</div>
+
+<h2>Field Reference</h2>
+<table>
+  <tr><th>Field</th><th>Required</th><th>Description</th></tr>
+  <tr>
+    <td><code>ID</code></td><td>Yes</td>
+    <td>Storage name used internally by Proxmox. Letters, numbers, and hyphens only.
+        Cannot be changed after creation.</td>
+  </tr>
+  <tr>
+    <td><code>TrueNAS Host</code></td><td>Yes</td>
+    <td>IP address or hostname of the TrueNAS server. Also used as the iSCSI portal address
+        unless <code>Portal IP</code> is set separately. Cannot be changed after creation.</td>
+  </tr>
+  <tr>
+    <td><code>API Key</code></td><td>Yes</td>
+    <td>Bearer token generated in TrueNAS. Stored in <code>/etc/pve/storage.cfg</code>.
+        Click the eye icon to show/hide while pasting.</td>
+  </tr>
+  <tr>
+    <td><code>Pool / Dataset Path</code></td><td>Yes</td>
+    <td>ZFS pool or dataset where volumes are created. Examples: <code>tank</code> or
+        <code>tank/proxmox/vdisks</code>. Cannot be changed after creation.</td>
+  </tr>
+  <tr>
+    <td><code>Sub-dataset</code></td><td>No</td>
+    <td>Extra sub-path appended below Pool / Dataset Path. Leave blank in most cases.</td>
+  </tr>
+  <tr>
+    <td><code>Shared</code></td><td>—</td>
+    <td>Should be checked for all cluster deployments. Marks storage accessible from all nodes.</td>
+  </tr>
+  <tr>
+    <td><code>Use SSL</code></td><td>—</td>
+    <td>Use HTTPS for API calls. Recommended. Disable only if TrueNAS has no HTTPS configured.</td>
+  </tr>
+  <tr>
+    <td><code>Verify SSL Certificate</code></td><td>—</td>
+    <td>Validate the TrueNAS HTTPS certificate against a CA. Leave unchecked for self-signed
+        certificates (common in homelab setups).</td>
+  </tr>
+  <tr>
+    <td><code>Portal IP</code></td><td>No</td>
+    <td>Override the iSCSI portal address. Use when the TrueNAS management IP differs from
+        the iSCSI data IP. Defaults to TrueNAS Host if blank.</td>
+  </tr>
+  <tr>
+    <td><code>Target IQN</code></td><td>No</td>
+    <td>Reference target used to discover portal and initiator group settings for new per-VM
+        targets. Auto-discovered if blank.</td>
+  </tr>
+</table>
+
+<h2>How It Works</h2>
+<p>When you create a VM disk, the plugin:</p>
+<ol>
+  <li>Creates a ZFS volume (<code>zvol</code>) on TrueNAS under your configured pool/dataset</li>
+  <li>Creates an iSCSI extent pointing to that zvol</li>
+  <li>Creates a dedicated iSCSI target <code>proxmox-vm-&lt;vmid&gt;</code> if one does not exist</li>
+  <li>Maps the extent to the target at the next available LUN ID</li>
+</ol>
+<p>QEMU connects directly to TrueNAS via an <code>iscsi://</code> URI — no <code>iscsiadm</code>
+session management is needed on the Proxmox host. When the last disk for a VM is deleted,
+the per-VM target is automatically removed.</p>
+
+<h2>Common Problems</h2>
+
+<table>
+  <tr><th>Symptom</th><th>Fix</th></tr>
+  <tr>
+    <td>"TrueNAS (ZFS/iSCSI)" missing from Add Storage dropdown</td>
+    <td>Hard-refresh the browser: <strong>Ctrl+Shift+R</strong> (Windows/Linux) or
+        <strong>Cmd+Shift+R</strong> (Mac)</td>
+  </tr>
+  <tr>
+    <td>401 Unauthorized in logs</td>
+    <td>API key is wrong, expired, or revoked — generate a new one in TrueNAS</td>
+  </tr>
+  <tr>
+    <td>No iSCSI portals found</td>
+    <td>Set the TrueNAS portal to listen on <code>0.0.0.0</code>, or set Portal IP to match
+        the exact IP the portal is listening on</td>
+  </tr>
+  <tr>
+    <td>VM won't boot / disk not accessible</td>
+    <td>Check that TCP 3260 is reachable from the Proxmox node:
+        <code>nc -zv &lt;truenas-ip&gt; 3260</code>. Check the initiator group allows the
+        Proxmox node's IP.</td>
+  </tr>
+  <tr>
+    <td>API key stopped working after SCALE upgrade</td>
+    <td>SCALE 25.04+ may revoke keys on upgrade. Generate a new API key and update the storage
+        config in Proxmox.</td>
+  </tr>
+</table>
+
+<h2>Checking Logs</h2>
+<pre>
+# Plugin log messages on the Proxmox node
+grep -i TrueNASPlugin /var/log/syslog
+
+# PVE daemon journal
+journalctl -u pvedaemon --since "30 minutes ago" | grep -i truenas
+
+# Install / removal log
+cat /var/log/freenas-proxmox-install.log
+</pre>
+
+<div class="note">
+  <strong>Quick API test</strong> from the Proxmox node shell:<br>
+  <code>curl -sk -H "Authorization: Bearer &lt;your-api-key&gt;"
+  https://&lt;truenas-host&gt;/api/v2.0/iscsi/global | python3 -m json.tool</code><br>
+  A JSON response with a <code>basename</code> field confirms the API key and connectivity are working.
+</div>
+
+<div class="footer">
+  <a href="https://github.com/TheGrandWazoo/freenas-proxmox" target="_blank">
+    freenas-proxmox on GitHub
+  </a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/TheGrandWazoo/freenas-proxmox/issues" target="_blank">
+    Report an issue
+  </a>
+  &nbsp;·&nbsp;
+  Full documentation: <code>docs/getting-started.md</code> in the repository
+</div>
+
+</body>
+</html>

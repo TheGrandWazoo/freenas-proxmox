@@ -4,6 +4,7 @@ set -e
 
 PLUGIN_DST="/usr/share/perl5/PVE/Storage/Custom/TrueNAS.pm"
 JS_DST="/usr/share/pve-manager/js/truenas-storage.js"
+HELP_DST="/usr/share/pve-docs/truenas-storage.html"
 TPL="/usr/share/pve-manager/index.html.tpl"
 LOG_FILE="/var/log/freenas-proxmox-install.log"
 
@@ -12,7 +13,8 @@ log() {
 }
 
 remove_ui() {
-    rm -f "$JS_DST" && log "Removed ${JS_DST}"
+    rm -f "$JS_DST"   && log "Removed ${JS_DST}"
+    rm -f "$HELP_DST" && log "Removed ${HELP_DST}"
 
     if [ -f "$TPL" ] && grep -qF 'truenas-storage.js' "$TPL"; then
         log "Removing <script> tag from ${TPL}"
@@ -36,7 +38,7 @@ case "$1" in
         ;;
     purge)
         log "Purging freenas-proxmox ..."
-        rm -f "$PLUGIN_DST" "$JS_DST" "$LOG_FILE"
+        rm -f "$PLUGIN_DST" "$JS_DST" "$HELP_DST" "$LOG_FILE"
         [ -f "$TPL" ] && sed -i '/truenas-storage\.js/d' "$TPL"
         ;;
     upgrade|failed-upgrade|disappear|abort-upgrade|abort-remove|abort-deconfigure)

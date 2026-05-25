@@ -7,6 +7,7 @@ set -e
 INSTALL_DIR="/usr/share/freenas-proxmox"
 PLUGIN_DST="/usr/share/perl5/PVE/Storage/Custom/TrueNAS.pm"
 JS_DST="/usr/share/pve-manager/js/truenas-storage.js"
+HELP_DST="/usr/share/pve-docs/truenas-storage.html"
 TPL="/usr/share/pve-manager/index.html.tpl"
 SCRIPT_TAG='    <script type="text/javascript" src="/pve2/js/truenas-storage.js?ver=[% version %]"></script>'
 LOG_FILE="/var/log/freenas-proxmox-install.log"
@@ -24,6 +25,9 @@ install_plugin() {
 install_ui() {
     log "Installing ${JS_DST}"
     cp "${INSTALL_DIR}/truenas-storage.js" "$JS_DST"
+
+    log "Installing ${HELP_DST}"
+    cp "${INSTALL_DIR}/truenas-storage-help.html" "$HELP_DST"
 
     if grep -qF 'truenas-storage.js' "$TPL" 2>/dev/null; then
         log "index.html.tpl already has truenas-storage.js — skipping"
