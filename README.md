@@ -89,6 +89,14 @@ v3.0 is a fully API-driven custom storage plugin. No SSH keys required.
 
    Copy the key — you will need it during storage configuration in Proxmox.
 
+> **Known limitation — TPM state disks**
+>
+> `tpmstate0` (virtual TPM) disks **cannot** be stored on v3.0 iSCSI storage. The `swtpm` backend requires a local filesystem path and cannot use the `iscsi://` URIs that v3.0 provides to QEMU.
+>
+> If your VM uses Secure Boot or TPM, store the `tpmstate0` disk on a separate storage (e.g. `local-lvm` or NFS). All other disk types — virtio, scsi, IDE, EFI — work normally.
+>
+> For live VM migration with TPM, the TPM state disk must also be on shared filesystem storage (NFS or CephFS), not on this plugin's storage.
+
 ### v2.x (current stable)
 
 1. **SSH keys** configured between Proxmox and TrueNAS — required for ZFS pool listing by the Proxmox core (see the [Proxmox wiki](https://pve.proxmox.com/wiki/Storage:_ZFS_over_iSCSI), section starting with `mkdir /etc/pve/priv/zfs`).
@@ -205,11 +213,40 @@ Edit `/etc/pve/storage.cfg` on any cluster node and change `blocksize 8192` to `
 
 ## Upgrading
 
-The package integrates with Proxmox VE's standard upgrade mechanism. On `apt upgrade`, the package will automatically re-apply any patches needed after a Proxmox VE update:
+### v2.x → v2.x (patch / minor upgrade)
+
+Standard apt upgrade — the package re-applies any patches needed after a Proxmox VE update automatically:
 
 ```bash
 apt update && apt full-upgrade
 ```
+
+### v2.x → v3.0 (migration)
+
+v3.0 is a different storage plugin type (`PVE::Storage::Custom::TrueNAS`) and uses a different architecture (per-VM iSCSI targets, `iscsi://` paths). There is no in-place upgrade — disk data stays on TrueNAS and you move VM disks across using Proxmox's built-in **Move Disk** function.
+
+> **Tested migration path (confirmed in lab):**
+> Migrating live VM disks from a v2.x storage to a v3.0 storage via Move Disk was validated on Proxmox VE 8.4 with TrueNAS CORE 13.0-U6 and TrueNAS SCALE 24.10. VMs remained running throughout the migration.
+
+#### Step-by-step
+
+1. **Install v3.0** on all Proxmox nodes (see [Installation](#installation) — use the testing channel until v3.0 is stable-released).
+
+2. **Add a new v3.0 storage** in Proxmox (*Datacenter → Storage → Add → TrueNAS (ZFS/iSCSI)*). Use the same TrueNAS pool as your existing v2.x storage. Give it a distinct ID (e.g. `truenas-v3`).
+
+3. **For each VM**, move its disks from the v2.x storage to the new v3.0 storage:
+   - Select the VM → **Hardware** tab
+   - Select the disk → **Move Disk**
+   - Choose the new v3.0 storage as the target
+   - Check **Delete source** if you want the old zvol removed after the move
+
+   Repeat for each disk (including EFI disk if present). VMs can remain running during Move Disk.
+
+4. **Verify** the VM boots and its disks are accessible after migration.
+
+5. **Remove the v2.x storage** from Proxmox once all VMs are migrated (*Datacenter → Storage → Remove*). The iSCSI targets and extents that belonged to the old storage will need to be cleaned up from TrueNAS manually if they were not auto-removed.
+
+> **Note:** EFI disks (`efidisk0`) and data disks can be migrated with Move Disk. TPM state disks (`tpmstate0`) must stay on local-lvm or NFS — see the [TPM limitation](#v30-upcoming) in Prerequisites.
 
 ---
 
