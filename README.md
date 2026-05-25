@@ -6,6 +6,8 @@
 [![GitHub issues](https://img.shields.io/github/issues/TheGrandWazoo/freenas-proxmox)](https://github.com/TheGrandWazoo/freenas-proxmox/issues)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/TheGrandWazoo?label=Sponsors)](https://github.com/sponsors/TheGrandWazoo)
 
+> This plugin is maintained by one person and has 4 million downloads — used in production at ISPs and MSPs worldwide. If it saves you time or headaches, [please consider sponsoring](https://github.com/sponsors/TheGrandWazoo) to keep it actively maintained and funded.
+
 A Proxmox VE storage plugin that manages ZFS-over-iSCSI volumes on TrueNAS (CORE and SCALE) through the TrueNAS REST API — no SSH-based LUN management, no `iscsiadm` scripting.
 
 ---
@@ -404,10 +406,14 @@ For significant changes, open an issue first to discuss the approach.
 
 ## Support the Project
 
-If this plugin saves you time, consider supporting its development:
+This plugin is built and maintained by one person. Sponsorship directly funds the hardware lab used to test every release against real Proxmox and TrueNAS nodes before it ships to you.
 
-- **GitHub Sponsors**: [github.com/sponsors/TheGrandWazoo](https://github.com/sponsors/TheGrandWazoo)
-- **PayPal**: [Donate via PayPal](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=TCLNEMBUYQUXN&source=url)
+**[Become a sponsor on GitHub](https://github.com/sponsors/TheGrandWazoo)** — GitHub Sponsors has no platform fee and goes straight to development.
+
+Sponsor tiers:
+- **$5/month** — Supporter. You keep this maintained.
+- **$10/month** — Backer. Listed in DONORS.md.
+- **$25/month** — Sustainer. Priority issue responses.
 
 Donor support has funded a 4-node Proxmox cluster and TrueNAS test lab used for development and validation. See [DONORS.md](DONORS.md) for a full list of donors.
 
