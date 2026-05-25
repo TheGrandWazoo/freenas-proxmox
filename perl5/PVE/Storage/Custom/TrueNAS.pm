@@ -228,7 +228,7 @@ sub _portal_groups_for_new_target {
 
     # Prefer copying groups from the configured base target
     if (my $base = $scfg->{truenas_target}) {
-        my ($bt) = grep { $_->{name} eq $base || "$_->{name}" =~ /:\Q$base\E$/ } @$targets;
+        my ($bt) = grep { $_->{name} eq $base || $base =~ /:\Q$_->{name}\E$/ } @$targets;
         if ($bt) {
             my @gs = grep { $our_portal_ids{$_->{portal}} } @{$bt->{groups} // []};
             return _clean_groups(\@gs) if @gs;
