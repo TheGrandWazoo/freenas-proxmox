@@ -115,9 +115,9 @@ Each VM gets its own dedicated iSCSI target — no SSH keys or pre-created targe
         unless <code>Portal IP</code> is set separately. Cannot be changed after creation.</td>
   </tr>
   <tr>
-    <td><code>API Key</code></td><td>Yes</td>
-    <td>Bearer token generated in TrueNAS. Stored in <code>/etc/pve/storage.cfg</code>.
-        Click the eye icon to show/hide while pasting.</td>
+    <td><code>API Key</code></td><td>No*</td>
+    <td>Bearer token generated in TrueNAS. Click the eye icon to show/hide while pasting.
+        Leave blank if you are using a keyfile (see below).</td>
   </tr>
   <tr>
     <td><code>Pool / Dataset Path</code></td><td>Yes</td>
@@ -152,6 +152,21 @@ Each VM gets its own dedicated iSCSI target — no SSH keys or pre-created targe
         targets. Auto-discovered if blank.</td>
   </tr>
 </table>
+
+<h2>Securing the API Token (Recommended)</h2>
+<p>By default the API token is stored in <code>/etc/pve/storage.cfg</code>, which is replicated
+in plaintext across the cluster. For production, store the token in a private keyfile instead:</p>
+<pre>
+# Run on each Proxmox node — replace 'truenas-vms' with your storage ID
+STORAGEID="truenas-vms"
+KEYFILE="/etc/pve/priv/truenas-${STORAGEID}.key"
+echo -n "your-api-token-here" &gt; "$KEYFILE"
+chmod 600 "$KEYFILE"
+pvesm set "$STORAGEID" --truenas_api_key ""
+</pre>
+<p>The plugin checks <code>/etc/pve/priv/truenas-&lt;storeid&gt;.key</code> automatically.
+The keyfile must exist on <strong>every Proxmox node</strong> — copy it manually, as
+<code>/etc/pve/priv/</code> is not replicated across the cluster.</p>
 
 <h2>How It Works</h2>
 <p>When you create a VM disk, the plugin:</p>

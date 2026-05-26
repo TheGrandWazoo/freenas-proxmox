@@ -53,7 +53,8 @@ sub properties {
             type        => 'string',
         },
         truenas_api_key => {
-            description => "TrueNAS API key (Bearer token — generate in TrueNAS UI under Credentials > API Keys)",
+            description => "TrueNAS API key (Bearer token). "
+                         . "Leave blank to use /etc/pve/priv/truenas-<storeid>.key instead.",
             type        => 'string',
         },
         truenas_ssl => {
@@ -98,7 +99,7 @@ sub options {
         bwlimit            => { optional => 1 },
         shared             => { optional => 1 },
         truenas_host       => { fixed    => 1 },
-        truenas_api_key    => {},
+        truenas_api_key    => { optional => 1 },
         truenas_ssl        => { optional => 1 },
         truenas_ssl_verify => { optional => 1 },
         truenas_pool       => { fixed    => 1 },
@@ -133,22 +134,51 @@ sub _ua {
     return $state->{$host}{ua};
 }
 
+# Resolves the API token from /etc/pve/priv/truenas-<storeid>.key (preferred)
+# or truenas_api_key in storage.cfg (backwards compat). Caches in $state so
+# the keyfile is read at most once per daemon session per host.
+sub _resolve_token {
+    my ($storeid, $scfg) = @_;
+    my $host = $scfg->{truenas_host};
+    return if $state->{$host}{api_token};
+
+    my $keyfile = "/etc/pve/priv/truenas-$storeid.key";
+    if (-r $keyfile) {
+        open(my $fh, '<', $keyfile)
+            or die "Cannot read TrueNAS token file '$keyfile': $!\n";
+        my $token = do { local $/; <$fh> };
+        close $fh;
+        $token =~ s/\s+\z//;
+        die "TrueNAS token file '$keyfile' is empty\n" unless length $token;
+        $state->{$host}{api_token} = $token;
+        return;
+    }
+
+    die "TrueNAS API token not configured for storage '$storeid'. "
+      . "Set truenas_api_key in storage.cfg or create $keyfile\n"
+        unless $scfg->{truenas_api_key};
+
+    $state->{$host}{api_token} = $scfg->{truenas_api_key};
+    return;
+}
+
 # Make a TrueNAS REST API v2.0 call.
 # Dies with a descriptive message on HTTP error.
 # Returns decoded JSON hashref/arrayref, or undef for empty 204 responses.
 sub _api {
     my ($scfg, $method, $path, $data) = @_;
 
-    die "TrueNAS API key is not configured for storage '$scfg->{truenas_host}'\n"
-        unless $scfg->{truenas_api_key};
+    my $host  = $scfg->{truenas_host};
+    my $token = $state->{$host}{api_token}
+        or die "TrueNAS API token not resolved for '$host'\n";
 
     my $scheme = ($scfg->{truenas_ssl} // 1) ? 'https' : 'http';
-    my $url    = "$scheme://$scfg->{truenas_host}/api/v2.0$path";
+    my $url    = "$scheme://$host/api/v2.0$path";
 
     my $req = HTTP::Request->new(uc($method) => $url);
     $req->header('Content-Type'  => 'application/json');
     $req->header('Accept'        => 'application/json');
-    $req->header('Authorization' => "Bearer $scfg->{truenas_api_key}");
+    $req->header('Authorization' => "Bearer $token");
     $req->content(encode_json($data)) if defined $data;
 
     my $res = _ua($scfg)->request($req);
@@ -365,6 +395,7 @@ sub parse_volname {
 
 sub status {
     my ($class, $storeid, $scfg, $cache) = @_;
+    _resolve_token($storeid, $scfg);
 
     my $pool_name = (split m{/}, $scfg->{truenas_pool})[0];
     my $datasets  = _api($scfg, 'GET', "/pool/dataset?id=$pool_name") // [];
@@ -380,6 +411,7 @@ sub status {
 
 sub alloc_image {
     my ($class, $storeid, $scfg, $vmid, $fmt, $name, $size_kb) = @_;
+    _resolve_token($storeid, $scfg);
 
     die "Unsupported format '$fmt' — only raw is supported\n" if $fmt && $fmt ne 'raw';
 
@@ -425,6 +457,7 @@ sub alloc_image {
 
 sub free_image {
     my ($class, $storeid, $scfg, $volname, $isBase) = @_;
+    _resolve_token($storeid, $scfg);
 
     _log('info', "free_image: removing $volname");
 
@@ -469,6 +502,7 @@ sub free_image {
 
 sub list_images {
     my ($class, $storeid, $scfg, $vmid, $fmt, $ids) = @_;
+    _resolve_token($storeid, $scfg);
 
     my $prefix   = _zvol_prefix($scfg);
     my $datasets = _api($scfg, 'GET', '/pool/dataset?type=VOLUME') // [];
@@ -505,6 +539,7 @@ sub list_images {
 
 sub volume_size_info {
     my ($class, $scfg, $storeid, $volname, $timeout) = @_;
+    _resolve_token($storeid, $scfg);
 
     my $zvol = _zvol_prefix($scfg) . "/$volname";
     my $enc  = uri_escape($zvol, "^A-Za-z0-9\\-_.~");
@@ -514,6 +549,7 @@ sub volume_size_info {
 
 sub path {
     my ($class, $scfg, $volname, $storeid, $snapname) = @_;
+    _resolve_token($storeid, $scfg);
 
     my $ext = _find_extent($scfg, $volname);
     die "Volume '$volname' has no iSCSI extent on $scfg->{truenas_host}. "
@@ -534,6 +570,7 @@ sub path {
 
 sub activate_storage {
     my ($class, $storeid, $scfg, $cache) = @_;
+    _resolve_token($storeid, $scfg);
     # Verify API reachability and warm up the global config cache
     _api_global($scfg);
     _log('info', "activate_storage: $storeid online");
@@ -549,6 +586,7 @@ sub deactivate_storage {
 
 sub activate_volume {
     my ($class, $storeid, $scfg, $volname, $snapname, $cache) = @_;
+    _resolve_token($storeid, $scfg);
     # QEMU connects via iscsi:// (libiscsi) — no iscsiadm session needed here.
     # Just verify the extent exists so we catch config errors early.
     my $ext = _find_extent($scfg, $volname);

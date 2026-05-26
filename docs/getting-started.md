@@ -140,6 +140,29 @@ Fill in the form using the table below. Fields not listed can be left at their d
 
 Click **Add**. Proxmox contacts TrueNAS and confirms the pool is reachable. If it fails, check the error message — see [section 6](#6-common-first-run-problems) for common causes.
 
+### 4.1 Securing the API Token (Recommended for Production)
+
+By default the API token is stored in `/etc/pve/storage.cfg`, which is replicated in plaintext across all cluster nodes via the PVE cluster filesystem. For production deployments, move the token into a private keyfile that only root can read and that is not replicated.
+
+Run these commands **on each Proxmox node** after adding the storage:
+
+```bash
+# Replace 'truenas-vms' with your actual storage ID
+STORAGEID="truenas-vms"
+KEYFILE="/etc/pve/priv/truenas-${STORAGEID}.key"
+
+# Write the token to the keyfile (replace the value with your actual token)
+echo -n "your-api-token-here" > "$KEYFILE"
+chmod 600 "$KEYFILE"
+
+# Remove the token from storage.cfg now that the keyfile is in place
+pvesm set "$STORAGEID" --truenas_api_key ""
+```
+
+The plugin automatically checks `/etc/pve/priv/truenas-<storeid>.key` at startup. If the file exists, it is used and `truenas_api_key` in storage.cfg is ignored.
+
+> **Note:** The keyfile must exist on **every Proxmox node** in your cluster. The `/etc/pve/priv/` directory is not replicated via pmxcfs — copy the file to each node manually (use `scp` or your configuration management tool).
+
 ---
 
 ## 5. Creating Your First VM Disk on TrueNAS Storage
