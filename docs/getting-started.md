@@ -94,7 +94,7 @@ EOF
 ### Step 3 — Install the Package
 
 ```bash
-apt update && apt install freenas-proxmox
+apt update && apt install truenas-proxmox
 ```
 
 The installer:
@@ -216,7 +216,7 @@ ls /usr/share/perl5/PVE/Storage/Custom/TrueNAS.pm
 ls /usr/share/pve-manager/js/truenas-storage.js
 ```
 
-Both files should exist. If they are missing, re-run `apt install freenas-proxmox`. Also check whether `pvedaemon` and `pveproxy` restarted cleanly:
+Both files should exist. If they are missing, re-run `apt install truenas-proxmox`. Also check whether `pvedaemon` and `pveproxy` restarted cleanly:
 
 ```bash
 systemctl status pvedaemon pveproxy
@@ -303,7 +303,7 @@ In the Proxmox UI: **Datacenter → Storage** → select each TrueNAS storage en
 ### Step 2 — Uninstall the Package
 
 ```bash
-apt remove freenas-proxmox
+apt remove truenas-proxmox
 ```
 
 The removal script:
@@ -315,7 +315,7 @@ The removal script:
 To also remove install logs:
 
 ```bash
-apt purge freenas-proxmox
+apt purge truenas-proxmox
 ```
 
 ### Step 3 — Refresh Your Browser
@@ -326,5 +326,5 @@ Hard-refresh the browser after uninstalling. The TrueNAS option will disappear f
 
 ## Getting Help
 
-- GitHub Issues: https://github.com/TheGrandWazoo/freenas-proxmox/issues
+- GitHub Issues: https://github.com/TheGrandWazoo/truenas-proxmox/issues
 - When reporting a bug, include log lines from `journalctl -u pvedaemon | grep -i truenas` and the output of `pveversion`

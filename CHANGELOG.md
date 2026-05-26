@@ -4,7 +4,7 @@ All notable changes to this project will be documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) independent of Proxmox VE or TrueNAS versions.
-See each [GitHub Release](https://github.com/TheGrandWazoo/freenas-proxmox/releases) for the specific Proxmox VE and TrueNAS versions supported.
+See each [GitHub Release](https://github.com/TheGrandWazoo/truenas-proxmox/releases) for the specific Proxmox VE and TrueNAS versions supported.
 
 ---
 
@@ -64,4 +64,4 @@ See each [GitHub Release](https://github.com/TheGrandWazoo/freenas-proxmox/relea
 
 ## [2.1.x] and Earlier
 
-See the [commit history](https://github.com/TheGrandWazoo/freenas-proxmox/commits/master) for earlier changes.
+See the [commit history](https://github.com/TheGrandWazoo/truenas-proxmox/commits/master) for earlier changes.

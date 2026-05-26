@@ -8,7 +8,8 @@ on:
     branches: [master, "release/3.x"]
 
 env:
-  PACKAGE_NAME: freenas-proxmox
+  PACKAGE_NAME: truenas-proxmox
+  TRANSITIONAL_PACKAGE_NAME: freenas-proxmox
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 # Cancel in-flight runs for the same branch on new push
@@ -57,7 +58,8 @@ jobs:
           echo "==> Running shellcheck..."
           shellcheck --severity=warning \
             packaging/DEBIAN/postinst \
-            packaging/DEBIAN/postrm
+            packaging/DEBIAN/postrm \
+            packaging/DEBIAN-transitional/postinst
           echo "Shell scripts OK"
 
   # ── Job 2: Build .deb ────────────────────────────────────────────────────────
@@ -67,11 +69,12 @@ jobs:
     needs: [lint]
 
     outputs:
-      version:         ${{ steps.vars.outputs.version }}
-      deb_file:        ${{ steps.vars.outputs.deb_file }}
-      channel:         ${{ steps.vars.outputs.channel }}
-      cloudsmith_repo: ${{ steps.vars.outputs.cloudsmith_repo }}
-      is_release:      ${{ steps.vars.outputs.is_release }}
+      version:              ${{ steps.vars.outputs.version }}
+      deb_file:             ${{ steps.vars.outputs.deb_file }}
+      transitional_deb_file: ${{ steps.vars.outputs.transitional_deb_file }}
+      channel:              ${{ steps.vars.outputs.channel }}
+      cloudsmith_repo:      ${{ steps.vars.outputs.cloudsmith_repo }}
+      is_release:           ${{ steps.vars.outputs.is_release }}
 
     steps:
       - uses: actions/checkout@v4.3.1
@@ -125,12 +128,14 @@ jobs:
           fi
 
           DEB_FILE="${PACKAGE_NAME}_${VERSION}_all.deb"
+          TRANSITIONAL_DEB_FILE="${TRANSITIONAL_PACKAGE_NAME}_${VERSION}_all.deb"
 
-          echo "version=${VERSION}"                   >> "$GITHUB_OUTPUT"
-          echo "deb_file=${DEB_FILE}"                 >> "$GITHUB_OUTPUT"
-          echo "channel=${CHANNEL}"                   >> "$GITHUB_OUTPUT"
-          echo "cloudsmith_repo=${CLOUDSMITH_REPO}"   >> "$GITHUB_OUTPUT"
-          echo "is_release=${IS_RELEASE}"             >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}"                                   >> "$GITHUB_OUTPUT"
+          echo "deb_file=${DEB_FILE}"                                 >> "$GITHUB_OUTPUT"
+          echo "transitional_deb_file=${TRANSITIONAL_DEB_FILE}"       >> "$GITHUB_OUTPUT"
+          echo "channel=${CHANNEL}"                                   >> "$GITHUB_OUTPUT"
+          echo "cloudsmith_repo=${CLOUDSMITH_REPO}"                   >> "$GITHUB_OUTPUT"
+          echo "is_release=${IS_RELEASE}"                             >> "$GITHUB_OUTPUT"
 
           {
             echo "### Build Summary"
@@ -148,7 +153,7 @@ jobs:
           STAGING="dist"
 
           mkdir -p "${STAGING}/DEBIAN"
-          mkdir -p "${STAGING}/usr/share/freenas-proxmox"
+          mkdir -p "${STAGING}/usr/share/truenas-proxmox"
 
           # Generate control file from template
           sed "s/\${VERSION}/${VERSION}/" packaging/DEBIAN/control.j2 \
@@ -160,30 +165,52 @@ jobs:
           chmod 0755 "${STAGING}/DEBIAN/postinst" "${STAGING}/DEBIAN/postrm"
 
           # Plugin files (postinst copies these to their final destinations)
-          cp perl5/PVE/Storage/Custom/TrueNAS.pm      "${STAGING}/usr/share/freenas-proxmox/TrueNAS.pm"
-          cp ui/truenas-storage.js                     "${STAGING}/usr/share/freenas-proxmox/truenas-storage.js"
-          cp ui/truenas-storage-help.html              "${STAGING}/usr/share/freenas-proxmox/truenas-storage-help.html"
+          cp perl5/PVE/Storage/Custom/TrueNAS.pm      "${STAGING}/usr/share/truenas-proxmox/TrueNAS.pm"
+          cp ui/truenas-storage.js                     "${STAGING}/usr/share/truenas-proxmox/truenas-storage.js"
+          cp ui/truenas-storage-help.html              "${STAGING}/usr/share/truenas-proxmox/truenas-storage-help.html"
 
           echo "==> Package contents:"
           find "${STAGING}" | sort
 
-      - name: Build .deb
+      - name: Assemble transitional package staging directory
         run: |
-          sudo dpkg-deb -Zgzip --build dist "${{ steps.vars.outputs.deb_file }}"
+          VERSION="${{ steps.vars.outputs.version }}"
+          STAGING="dist-transitional"
 
-      - name: Verify .deb
+          mkdir -p "${STAGING}/DEBIAN"
+
+          sed "s/\${VERSION}/${VERSION}/" packaging/DEBIAN-transitional/control.j2 \
+            > "${STAGING}/DEBIAN/control"
+
+          cp packaging/DEBIAN-transitional/postinst "${STAGING}/DEBIAN/postinst"
+          chmod 0755 "${STAGING}/DEBIAN/postinst"
+
+          echo "==> Transitional package contents:"
+          find "${STAGING}" | sort
+
+      - name: Build .deb packages
         run: |
-          echo "==> Package info:"
+          sudo dpkg-deb -Zgzip --build dist             "${{ steps.vars.outputs.deb_file }}"
+          sudo dpkg-deb -Zgzip --build dist-transitional "${{ steps.vars.outputs.transitional_deb_file }}"
+
+      - name: Verify .deb packages
+        run: |
+          echo "==> Package info (truenas-proxmox):"
           dpkg-deb --info "${{ steps.vars.outputs.deb_file }}"
           echo ""
-          echo "==> Package contents:"
+          echo "==> Package contents (truenas-proxmox):"
           dpkg-deb --contents "${{ steps.vars.outputs.deb_file }}"
+          echo ""
+          echo "==> Package info (freenas-proxmox transitional):"
+          dpkg-deb --info "${{ steps.vars.outputs.transitional_deb_file }}"
 
-      - name: Upload package artifact
+      - name: Upload package artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.vars.outputs.deb_file }}
-          path: ${{ steps.vars.outputs.deb_file }}
+          name: packages-${{ steps.vars.outputs.version }}
+          path: |
+            ${{ steps.vars.outputs.deb_file }}
+            ${{ steps.vars.outputs.transitional_deb_file }}
           retention-days: 30
 
   # ── Job 3: Security scan ─────────────────────────────────────────────────────
@@ -205,10 +232,10 @@ jobs:
           exit-code: 1
           format: table
 
-      - name: Download built package
+      - name: Download built packages
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.build.outputs.deb_file }}
+          name: packages-${{ needs.build.outputs.version }}
 
       - name: Extract and scan .deb contents
         run: |
@@ -236,12 +263,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4.3.1
 
-      - name: Download built package
+      - name: Download built packages
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.build.outputs.deb_file }}
+          name: packages-${{ needs.build.outputs.version }}
 
-      - name: Publish to Cloudsmith
+      - name: Publish truenas-proxmox to Cloudsmith
         uses: cloudsmith-io/action@v0.6.14
         with:
           api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
@@ -253,16 +280,30 @@ jobs:
           release: any-version
           file: ${{ needs.build.outputs.deb_file }}
 
+      - name: Publish transitional freenas-proxmox to Cloudsmith
+        uses: cloudsmith-io/action@v0.6.14
+        with:
+          api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
+          command: push
+          format: deb
+          owner: ksatechnologies
+          repo: ${{ needs.build.outputs.cloudsmith_repo }}
+          distro: debian
+          release: any-version
+          file: ${{ needs.build.outputs.transitional_deb_file }}
+
       - name: Create draft GitHub Release
         if: needs.build.outputs.is_release == 'true'
         uses: softprops/action-gh-release@v3
         with:
           name: "v${{ needs.build.outputs.version }}"
           draft: true
-          files: ${{ needs.build.outputs.deb_file }}
+          files: |
+            ${{ needs.build.outputs.deb_file }}
+            ${{ needs.build.outputs.transitional_deb_file }}
           generate_release_notes: false
           body: |
-            ## freenas-proxmox v${{ needs.build.outputs.version }}
+            ## truenas-proxmox v${{ needs.build.outputs.version }}
 
             > **Edit before publishing** — fill in tested versions before publishing.
 
@@ -283,7 +324,7 @@ jobs:
             - TrueNAS SCALE 24.10.x (tested: )
 
             ### Installation
-            See [README → Installation](https://github.com/TheGrandWazoo/freenas-proxmox#installation).
+            See [README → Installation](https://github.com/TheGrandWazoo/truenas-proxmox#installation).
 
             ### Changes
-            See [CHANGELOG.md](https://github.com/TheGrandWazoo/freenas-proxmox/blob/release/3.x/CHANGELOG.md).
+            See [CHANGELOG.md](https://github.com/TheGrandWazoo/truenas-proxmox/blob/release/3.x/CHANGELOG.md).

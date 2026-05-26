@@ -10,7 +10,7 @@ assignees: TheGrandWazoo
 
 | Component | Version |
 |-----------|---------|
-| Plugin (`dpkg -l freenas-proxmox`) | |
+| Plugin (`dpkg -l truenas-proxmox freenas-proxmox`) | |
 | Proxmox VE (`pveversion`) | |
 | TrueNAS type | CORE / SCALE |
 | TrueNAS version | |

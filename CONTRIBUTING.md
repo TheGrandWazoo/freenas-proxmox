@@ -1,4 +1,4 @@
-# Contributing to freenas-proxmox
+# Contributing to truenas-proxmox
 
 Thank you for your interest in contributing. This document covers how to report bugs, request features, and submit code.
 
@@ -22,16 +22,16 @@ Be respectful. This is a community project maintained in spare time. Constructiv
 
 ## Reporting Bugs
 
-Use the [bug report issue template](https://github.com/TheGrandWazoo/freenas-proxmox/issues/new?template=bug_report.md).
+Use the [bug report issue template](https://github.com/TheGrandWazoo/truenas-proxmox/issues/new?template=bug_report.md).
 
 Before filing:
-- Check existing [open and closed issues](https://github.com/TheGrandWazoo/freenas-proxmox/issues?q=is%3Aissue) for duplicates
+- Check existing [open and closed issues](https://github.com/TheGrandWazoo/truenas-proxmox/issues?q=is%3Aissue) for duplicates
 - Reproduce the issue on the latest release if possible
 
 **Always include:**
 - Proxmox VE version (`proxmox-ve` package version)
 - TrueNAS version and type (CORE / SCALE)
-- Plugin version (`dpkg -l freenas-proxmox`)
+- Plugin version (`dpkg -l truenas-proxmox`)
 - Relevant log lines from syslog (`grep -i freenas /var/log/syslog`)
 - The storage configuration (redact passwords/tokens)
 
@@ -39,7 +39,7 @@ Before filing:
 
 ## Requesting Features
 
-Use the [feature request issue template](https://github.com/TheGrandWazoo/freenas-proxmox/issues/new?template=feature_request.md).
+Use the [feature request issue template](https://github.com/TheGrandWazoo/truenas-proxmox/issues/new?template=feature_request.md).
 
 Feature requests are evaluated against the project roadmap. Large changes should be discussed in an issue before a pull request is opened.
 
@@ -57,14 +57,14 @@ Feature requests are evaluated against the project roadmap. Large changes should
 ### Local Build
 
 ```bash
-git clone https://github.com/TheGrandWazoo/freenas-proxmox.git
-cd freenas-proxmox
+git clone https://github.com/TheGrandWazoo/truenas-proxmox.git
+cd truenas-proxmox
 
 # Build the package (once packaging/ directory exists in v3.x)
-dpkg-deb -Zgzip --build packaging freenas-proxmox_dev_all.deb
+dpkg-deb -Zgzip --build packaging truenas-proxmox_dev_all.deb
 
 # Install locally for testing
-dpkg -i freenas-proxmox_dev_all.deb
+dpkg -i truenas-proxmox_dev_all.deb
 ```
 
 ### Testing Changes to FreeNAS.pm

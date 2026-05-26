@@ -1,0 +1,27 @@
+#!/bin/bash
+# postinst: freenas-proxmox transitional package
+# This package is empty — the real plugin is in truenas-proxmox.
+set -e
+
+LOG_FILE="/var/log/truenas-proxmox-install.log"
+
+log() {
+    echo "[freenas-proxmox] $*" | tee -a "$LOG_FILE"
+}
+
+case "$1" in
+    configure)
+        log "freenas-proxmox is now a transitional package."
+        log "The plugin has moved to: truenas-proxmox"
+        log "To complete migration:   apt install truenas-proxmox && apt purge freenas-proxmox"
+        log "Note: freenas-proxmox will not exist in v4.0."
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        echo "$0: called with unknown argument '$1'" >&2
+        exit 0
+        ;;
+esac
+
+exit 0

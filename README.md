@@ -1,9 +1,9 @@
 # TrueNAS ZFS-over-iSCSI Plugin for Proxmox VE
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/TheGrandWazoo/freenas-proxmox?sort=semver)](https://github.com/TheGrandWazoo/freenas-proxmox/releases/latest)
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/TheGrandWazoo/freenas-proxmox/build.yml?label=build)](https://github.com/TheGrandWazoo/freenas-proxmox/actions/workflows/build.yml)
-[![GitHub issues](https://img.shields.io/github/issues/TheGrandWazoo/freenas-proxmox)](https://github.com/TheGrandWazoo/freenas-proxmox/issues)
+[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/TheGrandWazoo/truenas-proxmox?sort=semver)](https://github.com/TheGrandWazoo/truenas-proxmox/releases/latest)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/TheGrandWazoo/truenas-proxmox/build.yml?label=build)](https://github.com/TheGrandWazoo/truenas-proxmox/actions/workflows/build.yml)
+[![GitHub issues](https://img.shields.io/github/issues/TheGrandWazoo/truenas-proxmox)](https://github.com/TheGrandWazoo/truenas-proxmox/issues)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/TheGrandWazoo?label=Sponsors)](https://github.com/sponsors/TheGrandWazoo)
 
 > This plugin is maintained by one person and has 4 million downloads — used in production at ISPs and MSPs worldwide. If it saves you time or headaches, [please consider sponsoring](https://github.com/sponsors/TheGrandWazoo) to keep it actively maintained and funded.
@@ -73,7 +73,7 @@ Proxmox VE's built-in ZFS-over-iSCSI storage type uses SSH to manage LUNs on the
 >
 > These versions are not supported. PVE 5 reached end-of-life in 2019, PVE 6 in 2022. Please upgrade your Proxmox VE installation.
 
-Check the [Releases page](https://github.com/TheGrandWazoo/freenas-proxmox/releases) for the specific Proxmox and TrueNAS versions tested against each release.
+Check the [Releases page](https://github.com/TheGrandWazoo/truenas-proxmox/releases) for the specific Proxmox and TrueNAS versions tested against each release.
 
 ---
 
@@ -132,7 +132,7 @@ deb [signed-by=/usr/share/keyrings/ksatechnologies-truenas-proxmox-keyring.gpg] 
 EOF
 
 # Install
-apt update && apt install freenas-proxmox
+apt update && apt install truenas-proxmox
 ```
 
 ### Testing / Beta Release
@@ -152,7 +152,7 @@ deb [signed-by=/usr/share/keyrings/ksatechnologies-truenas-proxmox-testing-keyri
 EOF
 
 # Install
-apt update && apt install freenas-proxmox
+apt update && apt install truenas-proxmox
 ```
 
 ---
@@ -209,7 +209,7 @@ The disk is created successfully despite this warning, but the suboptimal block 
 
 Edit `/etc/pve/storage.cfg` on any cluster node and change `blocksize 8192` to `blocksize 16384` for your TrueNAS SCALE storage entry. No data migration is needed — only newly created zvols use the updated value. Existing zvols are unaffected.
 
-> **Note:** Automatic blocksize detection based on TrueNAS version is planned for v2.4.0 (see [#241](https://github.com/TheGrandWazoo/freenas-proxmox/issues/241)).
+> **Note:** Automatic blocksize detection based on TrueNAS version is planned for v2.4.0 (see [#241](https://github.com/TheGrandWazoo/truenas-proxmox/issues/241)).
 
 ---
 
@@ -255,7 +255,7 @@ v3.0 is a different storage plugin type (`PVE::Storage::Custom::TrueNAS`) and us
 ## Uninstalling
 
 ```bash
-apt remove freenas-proxmox
+apt remove truenas-proxmox
 ```
 
 This removes the plugin and reverses all patches, returning your Proxmox VE installation to its unmodified state. Any storage configurations using this plugin should be removed from Proxmox before uninstalling.
@@ -362,7 +362,7 @@ TrueNAS SCALE 25.04 **revokes all existing API keys** that were created with whi
 
 **Additionally**, TrueNAS SCALE 25.04 enforces HTTPS for API key authentication — keys transmitted over plain HTTP are automatically revoked. Ensure **Use SSL** is enabled in your Proxmox storage config when using token auth.
 
-> **Note:** TrueNAS SCALE 25.04 also deprecates the REST API used by this plugin (v2.x). Full removal is planned for SCALE 26.x. Plugin v3.0.0 will add WebSocket JSON-RPC 2.0 support. See [issue #243](https://github.com/TheGrandWazoo/freenas-proxmox/issues/243).
+> **Note:** TrueNAS SCALE 25.04 also deprecates the REST API used by this plugin (v2.x). Full removal is planned for SCALE 26.x. Plugin v3.0.0 will add WebSocket JSON-RPC 2.0 support. See [issue #243](https://github.com/TheGrandWazoo/truenas-proxmox/issues/243).
 
 ### Disk size in Proxmox shows larger than what I entered
 
@@ -392,7 +392,7 @@ If you see iSCSI extents in TrueNAS that are not associated with any target, the
 
 ### Filing a Bug Report
 
-Please use the [GitHub issue tracker](https://github.com/TheGrandWazoo/freenas-proxmox/issues) and include the [bug report template](.github/ISSUE_TEMPLATE/bug_report.md). Include relevant log lines from `syslog` (search for `FreeNAS::`).
+Please use the [GitHub issue tracker](https://github.com/TheGrandWazoo/truenas-proxmox/issues) and include the [bug report template](.github/ISSUE_TEMPLATE/bug_report.md). Include relevant log lines from `syslog` (search for `FreeNAS::`).
 
 ---
 

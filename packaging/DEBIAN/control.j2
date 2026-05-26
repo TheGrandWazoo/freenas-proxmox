@@ -1,11 +1,13 @@
-Package: freenas-proxmox
+Package: truenas-proxmox
 Version: ${VERSION}
 Architecture: all
 Maintainer: KSA Technologies, LLC <theprofessor@ksatechnologies.com>
 Depends: librest-client-perl, open-iscsi
+Replaces: freenas-proxmox
+Breaks: freenas-proxmox (<< 3.0.0)
 Section: perl
 Priority: optional
-Homepage: https://github.com/TheGrandWazoo/freenas-proxmox
+Homepage: https://github.com/TheGrandWazoo/truenas-proxmox
 Description: TrueNAS Custom Storage Plugin for Proxmox VE
  Native PVE::Storage::Custom plugin for managing TrueNAS ZFS volumes over iSCSI.
  Discovered automatically by Proxmox VE — no patches to PVE system files required.

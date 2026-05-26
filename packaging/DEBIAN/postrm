@@ -1,15 +1,15 @@
 #!/bin/bash
-# postrm: freenas-proxmox v3.x removal script
+# postrm: truenas-proxmox v3.x removal script
 set -e
 
 PLUGIN_DST="/usr/share/perl5/PVE/Storage/Custom/TrueNAS.pm"
 JS_DST="/usr/share/pve-manager/js/truenas-storage.js"
 HELP_DST="/usr/share/pve-docs/truenas-storage.html"
 TPL="/usr/share/pve-manager/index.html.tpl"
-LOG_FILE="/var/log/freenas-proxmox-install.log"
+LOG_FILE="/var/log/truenas-proxmox-install.log"
 
 log() {
-    echo "[freenas-proxmox] $*" | tee -a "$LOG_FILE"
+    echo "[truenas-proxmox] $*" | tee -a "$LOG_FILE"
 }
 
 remove_ui() {
@@ -30,14 +30,14 @@ restart_pve_services() {
 
 case "$1" in
     remove)
-        log "Removing freenas-proxmox ..."
+        log "Removing truenas-proxmox ..."
         rm -f "$PLUGIN_DST" && log "Removed ${PLUGIN_DST}"
         remove_ui
         restart_pve_services
-        log "freenas-proxmox removed. Refresh your Proxmox browser tab."
+        log "truenas-proxmox removed. Refresh your Proxmox browser tab."
         ;;
     purge)
-        log "Purging freenas-proxmox ..."
+        log "Purging truenas-proxmox ..."
         rm -f "$PLUGIN_DST" "$JS_DST" "$HELP_DST" "$LOG_FILE"
         [ -f "$TPL" ] && sed -i '/truenas-storage\.js/d' "$TPL"
         ;;
