@@ -277,19 +277,25 @@ sub _portal_groups_for_new_target {
         return _clean_groups(\@gs) if @gs;
     }
 
-    # No existing targets — use first matching portal, no initiator restriction
+    # No existing targets — use first matching portal, no initiator restriction.
+    # Force int(): hash keys are always Perl strings; encode_json must see an IV
+    # to emit "portal":1 rather than "portal":"1" (rejected by Pydantic v2).
     my ($pid) = keys %our_portal_ids;
-    return [ { portal => $pid, initiator => undef, authmethod => 'NONE', auth => undef } ];
+    return [ { portal => int($pid), authmethod => 'NONE' } ];
 }
 
 sub _clean_groups {
     my ($gs) = @_;
-    return [ map { {
-        portal     => $_->{portal},
-        initiator  => $_->{initiator},
-        authmethod => $_->{authmethod} // 'NONE',
-        auth       => $_->{auth},
-    } } @$gs ];
+    return [ map {
+        my %g = (
+            portal     => int($_->{portal}),
+            authmethod => $_->{authmethod} // 'NONE',
+        );
+        # Omit null integer fields — Pydantic v2 (SCALE 25.04+) is strict about types
+        $g{initiator} = int($_->{initiator}) if defined $_->{initiator};
+        $g{auth}      = int($_->{auth})      if defined $_->{auth};
+        \%g
+    } @$gs ];
 }
 
 # Finds or creates the per-VM iSCSI target for $vmid.
@@ -314,7 +320,6 @@ sub _resolve_vm_target {
         my $groups = _portal_groups_for_new_target($scfg);
         my $new    = _api($scfg, 'POST', '/iscsi/target', {
             name   => $target_name,
-            alias  => "Proxmox VM $vmid",
             mode   => 'ISCSI',
             groups => $groups,
         });
@@ -323,7 +328,9 @@ sub _resolve_vm_target {
         _log('info', "Created per-VM target: $iqn (id=$t_id)");
     }
 
-    $state->{$host}{vm_targets}{$vmid} = { id => $t_id, iqn => $iqn };
+    # int() after _log interpolation: string-interpolating $t_id sets its PV flag,
+    # turning it into a dual-var that encode_json encodes as a string.
+    $state->{$host}{vm_targets}{$vmid} = { id => int($t_id), iqn => $iqn };
     return $state->{$host}{vm_targets}{$vmid};
 }
 
@@ -353,8 +360,8 @@ sub _next_lun_id {
     my $tes  = _api($scfg, 'GET', "/iscsi/targetextent?target=$target_id") // [];
     my %used = map { $_->{lunid} => 1 } @$tes;
     my $lun  = 0;
-    $lun++ while $used{$lun};
-    return $lun;
+    $lun++ while $used{$lun};    # hash-key lookup stringifies $lun; int() restores IV type
+    return int($lun);
 }
 
 # Returns { extent_id, targetextent_id, lun_id, target_id } for a volname,
@@ -449,10 +456,13 @@ sub alloc_image {
     my $target = _resolve_vm_target($scfg, $vmid);
     my $lun_id = _next_lun_id($scfg, $target->{id});
 
+    # int() forces fresh IV scalars — decode_json IDs can become dual-vars
+    # (string+int) after log interpolation or hash-key lookup, which causes
+    # encode_json to emit "7" instead of 7, rejected by Pydantic v2.
     _api($scfg, 'POST', '/iscsi/targetextent', {
-        target => $target->{id},
-        extent => $extent->{id},
-        lunid  => $lun_id,
+        target => int($target->{id}),
+        extent => int($extent->{id}),
+        lunid  => int($lun_id),
     });
 
     _reload_iscsi($scfg);
