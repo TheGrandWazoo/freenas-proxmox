@@ -15,7 +15,6 @@ Full rewrite as a native `PVE::Storage::Custom` plugin. No patching of PVE files
 
 | # | Title | Type |
 |---|-------|------|
-| [#250](https://github.com/TheGrandWazoo/freenas-proxmox/issues/250) | Rollback orphaned TrueNAS resources on `alloc_image` partial failure | bug / code |
 | [#228](https://github.com/TheGrandWazoo/freenas-proxmox/issues/228) | Migration path v2.x→v3.x docs | docs |
 | [#252](https://github.com/TheGrandWazoo/freenas-proxmox/issues/252) | Integration test 2.x→3.0 upgrade path docs | docs |
 
@@ -28,6 +27,7 @@ Full rewrite as a native `PVE::Storage::Custom` plugin. No patching of PVE files
 | [#263](https://github.com/TheGrandWazoo/freenas-proxmox/issues/263) | Fix `truenas_target` full-IQN match | `3a8a5df` |
 | [#260](https://github.com/TheGrandWazoo/freenas-proxmox/issues/260) | TPM state disk limitation callout in README | `0a8e7e7` |
 | [#264](https://github.com/TheGrandWazoo/freenas-proxmox/issues/264) | SCALE 25.04 compatibility: integer type coercion + alias uniqueness | `96957c0` |
+| [#250](https://github.com/TheGrandWazoo/freenas-proxmox/issues/250) | Rollback orphaned TrueNAS resources on `alloc_image` partial failure | `eab964c` |
 
 ---
 
