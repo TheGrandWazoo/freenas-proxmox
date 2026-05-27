@@ -187,7 +187,13 @@ sub _api {
         my $detail = '';
         eval {
             my $body = decode_json($res->content);
-            $detail = " — $body->{message}" if ref $body eq 'HASH' && $body->{message};
+            if (ref $body eq 'HASH' && $body->{message}) {
+                $detail = " — $body->{message}";
+            } elsif (ref $body eq 'ARRAY' && @$body) {
+                # SCALE 25.04+ returns Pydantic validation errors as an array
+                my @msgs = map { $_->{message} // $_->{msg} // '' } @$body;
+                $detail = " — " . join('; ', grep { length } @msgs);
+            }
         };
         my $msg = "TrueNAS API $method $path: " . $res->status_line . $detail;
         _log('err', $msg);
