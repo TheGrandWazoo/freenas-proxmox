@@ -27,6 +27,7 @@ Full rewrite as a native `PVE::Storage::Custom` plugin. No patching of PVE files
 | [#262](https://github.com/TheGrandWazoo/freenas-proxmox/issues/262) | Package rename: `freenas-proxmox` → `truenas-proxmox` (transitional package ships) | `9b2ecb8` |
 | [#263](https://github.com/TheGrandWazoo/freenas-proxmox/issues/263) | Fix `truenas_target` full-IQN match | `3a8a5df` |
 | [#260](https://github.com/TheGrandWazoo/freenas-proxmox/issues/260) | TPM state disk limitation callout in README | `0a8e7e7` |
+| [#264](https://github.com/TheGrandWazoo/freenas-proxmox/issues/264) | SCALE 25.04 compatibility: integer type coercion + alias uniqueness | `96957c0` |
 
 ---
 
