@@ -320,6 +320,7 @@ sub _resolve_vm_target {
         my $groups = _portal_groups_for_new_target($scfg);
         my $new    = _api($scfg, 'POST', '/iscsi/target', {
             name   => $target_name,
+            alias  => "Proxmox VM $vmid",
             mode   => 'ISCSI',
             groups => $groups,
         });
@@ -444,26 +445,51 @@ sub alloc_image {
         sparse  => JSON::true,
     });
 
-    # 2. Create the iSCSI extent
-    my $extent = _api($scfg, 'POST', '/iscsi/extent', {
-        name => $name,
-        type => 'DISK',
-        disk => "zvol/$zvol",
-        ro   => JSON::false,
-    });
+    # Steps 2-4 wrapped in eval so the zvol is cleaned up on any failure.
+    my ($extent, $target, $lun_id);
+    eval {
+        # 2. Create the iSCSI extent
+        $extent = _api($scfg, 'POST', '/iscsi/extent', {
+            name => $name,
+            type => 'DISK',
+            disk => "zvol/$zvol",
+            ro   => JSON::false,
+        });
 
-    # 3. Associate extent with the per-VM target
-    my $target = _resolve_vm_target($scfg, $vmid);
-    my $lun_id = _next_lun_id($scfg, $target->{id});
+        # 3. Associate extent with the per-VM target
+        $target = _resolve_vm_target($scfg, $vmid);
+        $lun_id = _next_lun_id($scfg, $target->{id});
 
-    # int() forces fresh IV scalars — decode_json IDs can become dual-vars
-    # (string+int) after log interpolation or hash-key lookup, which causes
-    # encode_json to emit "7" instead of 7, rejected by Pydantic v2.
-    _api($scfg, 'POST', '/iscsi/targetextent', {
-        target => int($target->{id}),
-        extent => int($extent->{id}),
-        lunid  => int($lun_id),
-    });
+        # int() forces fresh IV scalars — decode_json IDs can become dual-vars
+        # (string+int) after log interpolation or hash-key lookup, which causes
+        # encode_json to emit "7" instead of 7, rejected by Pydantic v2.
+        _api($scfg, 'POST', '/iscsi/targetextent', {
+            target => int($target->{id}),
+            extent => int($extent->{id}),
+            lunid  => int($lun_id),
+        });
+    };
+
+    if (my $err = $@) {
+        _log('warning', "alloc_image: partial failure — rolling back: $err");
+
+        # Reverse order, best-effort. Target: only removed if it has no
+        # remaining extents (i.e. it was just created for this disk).
+        if ($target) {
+            eval { _maybe_cleanup_vm_target($scfg, $vmid, $target->{id}) };
+        }
+        if ($extent) {
+            eval { _api($scfg, 'DELETE', "/iscsi/extent/id/$extent->{id}",
+                        { force => JSON::true }) };
+            _log('warning', "alloc_image rollback: extent delete failed: $@") if $@;
+        }
+        my $zvol_id = uri_escape($zvol, "^A-Za-z0-9\\-_.~");
+        eval { _api($scfg, 'DELETE', "/pool/dataset/id/$zvol_id",
+                    { recursive => JSON::true }) };
+        _log('warning', "alloc_image rollback: zvol delete failed: $@") if $@;
+
+        die $err;
+    }
 
     _reload_iscsi($scfg);
 
