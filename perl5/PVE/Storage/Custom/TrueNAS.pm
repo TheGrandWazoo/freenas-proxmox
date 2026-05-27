@@ -365,8 +365,9 @@ sub _next_lun_id {
     return int($lun);
 }
 
-# Returns { extent_id, targetextent_id, lun_id, target_id } for a volname,
-# or undef if no extent exists.
+# Returns { extent_id, targetextents, targetextent_id, lun_id, target_id } for a volname,
+# or undef if no extent exists.  targetextents is the full array of all associations
+# (normally one, but may be >1 if duplicate rows exist from a prior failed alloc_image).
 sub _find_extent {
     my ($scfg, $volname) = @_;
 
@@ -379,6 +380,7 @@ sub _find_extent {
 
     return {
         extent_id       => $ext->{id},
+        targetextents   => $tes,
         targetextent_id => defined $te ? $te->{id}     : undef,
         lun_id          => defined $te ? $te->{lunid}  : 0,
         target_id       => defined $te ? $te->{target} : undef,
@@ -508,14 +510,13 @@ sub free_image {
     my $ext = _find_extent($scfg, $volname);
 
     if ($ext) {
-        # Step 1: unmap the LUN from the target.  This must happen before the
-        # extent delete when the per-VM target still has other LUNs with active
-        # sessions (e.g. migrating one disk while the VM is running with others).
-        # Removing the targetextent severs just this LUN's association without
-        # touching the target session or other LUNs.
-        if (defined $ext->{targetextent_id}) {
-            eval { _api($scfg, 'DELETE', "/iscsi/targetextent/id/$ext->{targetextent_id}") };
-            _log('warning', "free_image: could not remove targetextent $ext->{targetextent_id}: $@") if $@;
+        # Step 1: unmap ALL LUN associations for this extent.  Normally there is
+        # exactly one targetextent row, but duplicate rows can exist if a prior
+        # alloc_image failed partway through and left an orphan.  Deleting all of
+        # them before the extent DELETE prevents a 422 "target in use" rejection.
+        for my $te (@{ $ext->{targetextents} // [] }) {
+            eval { _api($scfg, 'DELETE', "/iscsi/targetextent/id/$te->{id}") };
+            _log('warning', "free_image: could not remove targetextent $te->{id}: $@") if $@;
         }
 
         # Step 2: delete the extent.  force=true handles any residual session
