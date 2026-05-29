@@ -12,9 +12,9 @@ package PVE::Storage::Custom::TrueNAS;
 # Per-VM target architecture:
 #   Each VM gets its own iSCSI target (proxmox-vm-<vmid>).
 #   path() returns iscsi://portal/iqn:proxmox-vm-<vmid>/lun — QEMU connects via
-#   libiscsi.  When the VM stops, QEMU's connection closes.  TrueNAS sees no
-#   active session on that target, so extent DELETE (force=true) works without
-#   stopping the TrueNAS iSCSI service.
+#   libiscsi.  Deleting a disk from a running VM (e.g. removing an unused disk)
+#   requires force=true on both the targetextent and extent DELETEs — TrueNAS
+#   sees the target session as active even when the specific LUN is not in use.
 
 use strict;
 use warnings;
@@ -512,10 +512,11 @@ sub free_image {
     if ($ext) {
         # Step 1: unmap ALL LUN associations for this extent.  Normally there is
         # exactly one targetextent row, but duplicate rows can exist if a prior
-        # alloc_image failed partway through and left an orphan.  Deleting all of
-        # them before the extent DELETE prevents a 422 "target in use" rejection.
+        # alloc_image failed partway through and left an orphan.  force=true
+        # (bare boolean) is required by SCALE 24.10 when the target has an active
+        # session — e.g. removing an unused disk from a running VM.
         for my $te (@{ $ext->{targetextents} // [] }) {
-            eval { _api($scfg, 'DELETE', "/iscsi/targetextent/id/$te->{id}") };
+            eval { _api($scfg, 'DELETE', "/iscsi/targetextent/id/$te->{id}", JSON::true) };
             _log('warning', "free_image: could not remove targetextent $te->{id}: $@") if $@;
         }
 
