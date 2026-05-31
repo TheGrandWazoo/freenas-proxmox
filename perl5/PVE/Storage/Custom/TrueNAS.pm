@@ -193,6 +193,15 @@ sub _api {
                 # SCALE 25.04+ returns Pydantic validation errors as an array
                 my @msgs = map { $_->{message} // $_->{msg} // '' } @$body;
                 $detail = " — " . join('; ', grep { length } @msgs);
+            } elsif (ref $body eq 'HASH') {
+                # SCALE 25.10+ returns field-keyed validation errors: { "field": [{message}...] }
+                my @msgs;
+                for my $field (sort keys %$body) {
+                    my $errs = $body->{$field};
+                    next unless ref $errs eq 'ARRAY';
+                    push @msgs, map { "$field: " . ($_->{message} // '') } @$errs;
+                }
+                $detail = " — " . join('; ', grep { length } @msgs) if @msgs;
             }
         };
         my $msg = "TrueNAS API $method $path: " . $res->status_line . $detail;
@@ -435,15 +444,18 @@ sub alloc_image {
 
     my $prefix = _zvol_prefix($scfg);
     my $zvol   = "$prefix/$name";
-    my $size_b = $size_kb * 1024;
+    my $size_b = int($size_kb) * 1024;
 
     _log('info', "alloc_image: creating zvol $zvol ($size_b bytes) for VM $vmid");
 
     # 1. Create the zvol
+    # int() here produces a fresh IV — string interpolation in the log call above
+    # sets Perl's POK flag on $size_b, which causes JSON::XS to encode it as a
+    # string. SCALE 25.10 strict Pydantic rejects string-typed integers.
     _api($scfg, 'POST', '/pool/dataset', {
         name    => $zvol,
         type    => 'VOLUME',
-        volsize => $size_b,
+        volsize => int($size_b),
         sparse  => JSON::true,
     });
 
