@@ -47,9 +47,12 @@ Proxmox VE's built-in ZFS-over-iSCSI storage type uses SSH to manage LUNs on the
 
 | Plugin Version | Proxmox VE | TrueNAS CORE | TrueNAS SCALE | Status |
 |:--------------:|:----------:|:------------:|:-------------:|:------:|
-| **3.x** *(upcoming)* | 8.x, 9.x | 13.0-U6+ ✅ | Electric Eel (24.10)+ ✅, Cobia (23.10)+, Dragonfish (24.04)+ | In development |
-| **2.x** *(current)* | 7.x ⚠️, 8.0–8.3 ✅, 8.4.x ✅ | 11.3+ | 22.02+ | Active |
+| **3.x** *(beta)* | 8.4.x ✅ | 13.0-U6+ ✅ | Electric Eel (24.10) ✅, Fangtooth (25.04) ✅, Goldeye (25.10) ✅ | Beta — active development |
+| **3.x** *(planned)* | 9.x ⏳ | 13.0-U6+ | Electric Eel (24.10)+, Goldeye (25.10)+ | v3.1.0 — in progress |
+| **2.x** *(stable)* | 7.x ⚠️, 8.0–8.3 ✅, 8.4.x ✅ | 11.3+ | 22.02+ | Active |
 | **1.x** *(legacy)* | 5.x, 6.x | 11.x | — | Unsupported |
+
+Tested combinations are marked ✅. Untested combinations may work but are not validated. Check the [Releases page](https://github.com/TheGrandWazoo/freenas-proxmox/releases) for the specific versions tested against each release.
 
 ### Important Version Notices
 
@@ -57,17 +60,19 @@ Proxmox VE's built-in ZFS-over-iSCSI storage type uses SSH to manage LUNs on the
 >
 > v2.x is the **last release series that supports PVE 7**. PVE 7 support is best-effort only — no new patches will be developed for it.
 >
-> **Do not upgrade to v3.0** when it releases — v3.0 requires Proxmox VE 8 or later. Stay on the latest v2.x release.
+> v3.0 requires Proxmox VE 8 or later. Stay on the latest v2.x release.
 
 > **Proxmox VE 8 users**
 >
-> Proxmox VE 8 reaches **end-of-life on 2026-08-31**. Plan your upgrade to PVE 9 before that date.
+> v3.0 beta is tested and working on PVE 8.4.x. This is the recommended version for running v3.0 beta.
 >
-> v2.x works on PVE 8. When you upgrade to PVE 9, migrate to v3.0 (coming before the EOL date).
+> Proxmox VE 8 reaches **end-of-life on 2026-08-31**. PVE 9 support is targeted for v3.1.0, planned well before that date.
 
 > **Proxmox VE 9+ users**
 >
-> v2.x is **not supported on PVE 9**. Use v3.0 when it is released. Do not install v2.x on a PVE 9 node.
+> v3.0 beta has a **known issue on PVE 9.x** — VMs may fail to start due to a LUN type mismatch in QEMU's blockdev layer ([#266](https://github.com/TheGrandWazoo/freenas-proxmox/issues/266)). PVE 9.x support is actively being investigated for **v3.1.0**.
+>
+> v2.x is not supported on PVE 9. Stay on PVE 8.x until v3.1.0 is available.
 
 > **Proxmox VE 5 or 6 users**
 >
@@ -79,7 +84,7 @@ Check the [Releases page](https://github.com/TheGrandWazoo/truenas-proxmox/relea
 
 ## Prerequisites
 
-### v3.0 (upcoming)
+### v3.0 (beta)
 
 v3.0 is a fully API-driven custom storage plugin. No SSH keys required.
 
