@@ -628,6 +628,9 @@ sub path {
 # integer.  PVE::Storage::Plugin does lun => "$3" (string capture from the
 # iscsi:// URL regex) which QEMU 9's strict blockdev schema rejects.  We build
 # the hash directly from _find_extent so the value is always an IV. (#266)
+# REMOVE this override once Proxmox fixes Plugin.pm to use int($3) — verify by
+# checking pve-storage changelog for an iscsi lun integer fix, then confirm
+# "grep 'lun =>' /usr/share/perl5/PVE/Storage/Plugin.pm" no longer quotes $3.
 sub qemu_blockdev_options {
     my ($class, $scfg, $storeid, $volname, $machine_version, $options) = @_;
     _resolve_token($storeid, $scfg);
