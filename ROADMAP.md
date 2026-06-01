@@ -74,22 +74,31 @@ gh repo rename truenas-proxmox --repo TheGrandWazoo/freenas-proxmox
 
 ---
 
-## Upcoming — v3.1.0 (Snapshots + PVE 9 hardening)
+## Upcoming — v3.1.0 (PVE 9 only + Snapshots)
 
-**Target:** Before PVE 8 EOL — 2026-08-31
+**Target:** Before PVE 8 EOL — 2026-08-31  
+**PVE support:** PVE 9.x only — PVE 8 support dropped  
+**Decision date:** 2026-05-31 — see ADR-009
+
+v3.1 is the first release that requires PVE 9. Dropping PVE 8 allows:
+- Bumping `api()` to match PVE 9's `APIVER` (silences "older storage API" warning — see [#270](https://github.com/TheGrandWazoo/freenas-proxmox/issues/270))
+- Implementing snapshot-as-volume-chains (PVE 9 feature)
+- Removing the `qemu_blockdev_options` override if Proxmox fixes `Plugin.pm` upstream
 
 | # | Title |
 |---|-------|
 | [#234](https://github.com/TheGrandWazoo/freenas-proxmox/issues/234) | Snapshot interface (Snapshot-as-Volume-Chains, PVE 9.0+) |
+| [#270](https://github.com/TheGrandWazoo/freenas-proxmox/issues/270) | Bump `api()` to PVE 9 APIVER — requires dropping PVE 8 |
 | [#249](https://github.com/TheGrandWazoo/freenas-proxmox/issues/249) | Per-variant dispatch (TrueNAS-Core.pm / TrueNAS-Scale.pm) — evaluate |
 | [#256](https://github.com/TheGrandWazoo/freenas-proxmox/issues/256) | Multipath support |
 
 ---
 
-## Upcoming — v3.2.0 (WebSocket API, SCALE 25.x)
+## Upcoming — v4.0.0 (WebSocket API, SCALE 25.x)
 
 **Target:** After PoC testing on SCALE 25.04 Fangtooth and 25.10 Goldeye  
-**Scope:** TBD pending PoC results
+**Scope:** TBD pending PoC results  
+**Why major version:** WebSocket JSON-RPC 2.0 is a new transport layer — a genuine architectural change, not a support boundary adjustment.
 
 | # | Title |
 |---|-------|
