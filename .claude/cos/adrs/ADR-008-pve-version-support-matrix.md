@@ -1,7 +1,7 @@
 # ADR-008: PVE Version Support Matrix
 
 **Date**: 2026-05-19  
-**Status**: Accepted  
+**Status**: Superseded by ADR-009  
 **Deciders**: Kevin Adams
 
 ## Context

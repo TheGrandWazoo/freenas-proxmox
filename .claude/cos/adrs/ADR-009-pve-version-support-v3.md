@@ -1,9 +1,9 @@
 # ADR-009: PVE Version Support Matrix — v3.x and v4.0 Versioning Strategy
 
 **Date**: 2026-05-31  
-**Status**: Draft  
+**Status**: Accepted  
 **Deciders**: Kevin Adams  
-**Supersedes**: ADR-008 (pending acceptance of this ADR)
+**Supersedes**: ADR-008
 
 ## Context
 
