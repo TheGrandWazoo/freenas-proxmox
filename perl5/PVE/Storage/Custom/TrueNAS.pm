@@ -624,6 +624,31 @@ sub path {
     return ($dev_path, $ds_vmid, $vtype);
 }
 
+# Override base-class qemu_blockdev_options to ensure lun is encoded as a JSON
+# integer.  PVE::Storage::Plugin does lun => "$3" (string capture from the
+# iscsi:// URL regex) which QEMU 9's strict blockdev schema rejects.  We build
+# the hash directly from _find_extent so the value is always an IV. (#266)
+sub qemu_blockdev_options {
+    my ($class, $scfg, $storeid, $volname, $machine_version, $options) = @_;
+    _resolve_token($storeid, $scfg);
+
+    my $ext = _find_extent($scfg, $volname);
+    die "Volume '$volname' has no iSCSI extent on $scfg->{truenas_host}.\n" unless $ext;
+    die "Volume '$volname' is not mapped to any iSCSI target.\n"
+        unless defined $ext->{target_id};
+
+    my $t   = _api($scfg, 'GET', "/iscsi/target/id/$ext->{target_id}") // {};
+    my $iqn = _basename($scfg) . ":$t->{name}";
+
+    return {
+        driver    => 'iscsi',
+        portal    => _portal($scfg),
+        target    => $iqn,
+        lun       => int($ext->{lun_id}),
+        transport => 'tcp',
+    };
+}
+
 sub activate_storage {
     my ($class, $storeid, $scfg, $cache) = @_;
     _resolve_token($storeid, $scfg);
