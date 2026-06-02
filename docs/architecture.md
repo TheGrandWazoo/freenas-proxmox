@@ -360,16 +360,17 @@ lint → build → security → publish
 
 **Job 4: Publish**
 - Skipped for PRs and branches with `channel=none`
-- Cloudsmith `deb` push to the resolved repo
+- Cloudsmith `deb` push to the resolved repo (parallel channel, transitional)
+- GitHub Pages apt repo update: `.deb` added to `pool/v{major}/`, `Packages.gz` and signed `InRelease` regenerated for the relevant dist tracks, committed to `gh-pages` branch
 - On tagged releases: creates a draft GitHub Release with the `.deb` attached
 
 ### Version String Logic
 
-| Git ref | Debian version string | Channel | Cloudsmith repo |
-|---|---|---|---|
-| `refs/tags/v3.0.0` | `3.0.0-1` | stable | `truenas-proxmox` |
-| `refs/heads/master` or `refs/heads/release/3.x` | `3.0.0~beta+abc1234` | testing | `truenas-proxmox-testing` |
-| `refs/heads/release/*` (other) | `3.0.0~alpha+abc1234` | development | `truenas-proxmox-snapshots` |
+| Git ref | Debian version string | Channel | Cloudsmith repo | GitHub Pages dist |
+|---|---|---|---|---|
+| `refs/tags/v3.0.0` | `3.0.0-1` | stable | `truenas-proxmox` | `v3` |
+| `refs/heads/master` or `refs/heads/release/3.x` | `3.0.0~beta+abc1234` | testing | `truenas-proxmox-testing` | — |
+| `refs/heads/release/*` (other) | `3.0.0~alpha+abc1234` | development | `truenas-proxmox-snapshots` | — |
 | feature branches, PRs | `3.0.0~dev+abc1234` | none | not published |
 
 The tilde (`~`) in the Debian version sorts below the base version in `dpkg`, guaranteeing pre-release builds never auto-upgrade over a stable release.
@@ -598,7 +599,8 @@ Major design decisions live in `.claude/cos/adrs/`. Check before making changes 
 |---|---|
 | ADR-001 | Consolidate build pipeline into this repo; no install-time git clone |
 | ADR-002 | Full `PVE::Storage::Custom` plugin; no ZFSPlugin.pm or pvemanagerlib.js patches |
-| ADR-003 | Transition from Cloudsmith to GitHub Pages apt repo (accepted, not yet implemented) |
+| ADR-003 | Superseded by ADR-010 |
+| ADR-010 | GitHub Pages apt repo with per-major-version dist tracks (`v3`, `main`/`v2` for backward compat) |
 | ADR-004 | `eval {}` rollback pattern for all multi-step TrueNAS operations |
 | ADR-005 | Bearer token (API key) as primary auth; basic auth removed in v3.0 |
 | ADR-006 | `$VERSION` in `TrueNAS.pm` is the single source of truth for package versioning |

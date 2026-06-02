@@ -30,14 +30,12 @@ A Proxmox VE storage plugin that manages ZFS-over-iSCSI volumes on TrueNAS (CORE
 
 ## How It Works
 
-Proxmox VE's built-in ZFS-over-iSCSI storage type uses SSH to manage LUNs on the storage server. This plugin replaces that SSH-based management layer with direct calls to the **TrueNAS REST API**, giving you:
+This plugin is a native `PVE::Storage::Custom` type — Proxmox discovers it automatically and treats it like any other storage backend. When you create a VM disk, the plugin calls the **TrueNAS REST API** to provision a ZFS volume (zvol) and a dedicated per-VM iSCSI target, then hands Proxmox an `iscsi://` path. QEMU opens that path directly — no SSH, no `iscsiadm`, no kernel iSCSI sessions on the Proxmox host.
 
-- API token (Bearer) or username/password authentication
-- Automatic TrueNAS API version detection (v1 and v2)
-- Support for both TrueNAS CORE and TrueNAS SCALE
-- Proper rollback when operations fail (no dangling iSCSI extents)
-
-> **Note:** Proxmox still uses `iscsiadm` to connect and disconnect the iSCSI session on the Proxmox host itself — that part is handled by the core Proxmox code and does not require SSH. The SSH keys documented in the [Proxmox ZFS-over-iSCSI wiki](https://pve.proxmox.com/wiki/Storage:_ZFS_over_iSCSI) are still required for the ZFS pool listing step.
+- Bearer Token (API key) authentication — no username/password, no SSH keys
+- Per-VM iSCSI targets (`proxmox-vm-<vmid>`) — removing one disk never affects other VMs
+- Automatic rollback when operations fail (no dangling iSCSI extents)
+- Supports TrueNAS CORE 13.x and TrueNAS SCALE 24.10–25.10
 
 ---
 
@@ -47,8 +45,7 @@ Proxmox VE's built-in ZFS-over-iSCSI storage type uses SSH to manage LUNs on the
 
 | Plugin Version | Proxmox VE | TrueNAS CORE | TrueNAS SCALE | Status |
 |:--------------:|:----------:|:------------:|:-------------:|:------:|
-| **3.x** *(beta)* | 8.4.x ✅ | 13.0-U6+ ✅ | Electric Eel (24.10) ✅, Fangtooth (25.04) ✅, Goldeye (25.10) ✅ | Beta — active development |
-| **3.x** *(planned)* | 9.x ⏳ | 13.0-U6+ | Electric Eel (24.10)+, Goldeye (25.10)+ | v3.1.0 — in progress |
+| **3.x** *(stable)* | 8.4.x ✅, 9.x ✅ | 13.0-U6+ ✅ | Electric Eel (24.10) ✅, Fangtooth (25.04) ✅, Goldeye (25.10) ✅ | Stable |
 | **2.x** *(stable)* | 7.x ⚠️, 8.0–8.3 ✅, 8.4.x ✅ | 11.3+ | 22.02+ | Active |
 | **1.x** *(legacy)* | 5.x, 6.x | 11.x | — | Unsupported |
 
@@ -335,27 +332,20 @@ iscsiadm: No active sessions.
 
 **Layer 3 — Proxmox core storage stack**
 
-Errors from PVE's own storage subsystem — ZFSPlugin.pm, pvedaemon, pool listing via SSH, or storage.cfg parsing. These exist regardless of which iSCSI plugin you use.
+Errors from PVE's own storage subsystem — pvedaemon, pvestatd, or storage.cfg parsing.
 
 Common causes:
-- SSH keys not configured between Proxmox and TrueNAS (required for ZFS pool listing — see [Prerequisites](#prerequisites))
-- `storage.cfg` syntax error
+- `storage.cfg` syntax error or stale config keys (especially after migrating from v2.x — see [migration guide](docs/migrating-from-v2.md))
 - `pvedaemon` or `pvestatd` service crashed
-
-Example log line:
-```
-unable to run command '/usr/bin/ssh ... zfs list ...': exit code 255
-```
 
 **Quick triage:**
 
 | Symptom | Likely layer | First check |
 |---------|-------------|-------------|
 | Disk creation fails, API error in task log | Plugin (Layer 1) | API key, SSL setting, TrueNAS API reachable |
-| Disk created on TrueNAS but Proxmox reports error | Plugin (Layer 1) | syslog for `freenas-proxmox:` lines |
+| Disk created on TrueNAS but Proxmox reports error | Plugin (Layer 1) | syslog for `truenas-proxmox:` lines |
 | VM won't start, iSCSI session error | iSCSI/QEMU (Layer 2) | TrueNAS iSCSI service, initiator group ACL |
-| Storage shows unavailable, pool listing fails | Proxmox core (Layer 3) | SSH key setup, `pvedaemon` service |
-| Kernel errors after disk deletion (v2.x) | iSCSI/Proxmox (Layer 2/3) | `iscsiadm -m session -R` to rescan |
+| Storage shows unavailable | Proxmox core (Layer 3) | `pvedaemon` service, storage.cfg |
 
 ---
 

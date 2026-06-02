@@ -77,18 +77,17 @@ Run all of these commands on **each Proxmox node** in your cluster, or on your s
 ### Step 1 — Import the GPG Signing Key
 
 ```bash
-curl -fsSL https://dl.cloudsmith.io/public/ksatechnologies/truenas-proxmox/gpg.284C106104A8CE6D.key \
+curl -fsSL https://thegrandwazoo.github.io/freenas-proxmox/public.gpg.key \
   | gpg --dearmor \
-  | tee /usr/share/keyrings/ksatechnologies-truenas-proxmox-keyring.gpg > /dev/null
+  | tee /etc/apt/keyrings/truenas-proxmox.gpg > /dev/null
 ```
 
 ### Step 2 — Add the Package Repository
 
 ```bash
-cat > /etc/apt/sources.list.d/ksatechnologies-repo.list << 'EOF'
-deb [signed-by=/usr/share/keyrings/ksatechnologies-truenas-proxmox-keyring.gpg] \
-  https://dl.cloudsmith.io/public/ksatechnologies/truenas-proxmox/deb/debian any-version main
-EOF
+echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
+https://thegrandwazoo.github.io/freenas-proxmox v3 main" \
+  | tee /etc/apt/sources.list.d/truenas-proxmox.list
 ```
 
 ### Step 3 — Install the Package

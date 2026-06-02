@@ -76,8 +76,15 @@ Before you do anything else, check if any of your VMs have a TPM state disk. QEM
 Run this on **every node in the cluster** before adding the new storage:
 
 ```bash
-# Add the Cloudsmith repo (if not already added)
-curl -1sLf 'https://dl.cloudsmith.io/public/ksatechnologies/truenas-proxmox/setup.deb.sh' | bash
+# Import the GPG key
+curl -fsSL https://thegrandwazoo.github.io/freenas-proxmox/public.gpg.key \
+  | gpg --dearmor \
+  | tee /etc/apt/keyrings/truenas-proxmox.gpg > /dev/null
+
+# Add the v3 repository track
+echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
+https://thegrandwazoo.github.io/freenas-proxmox v3 main" \
+  | tee /etc/apt/sources.list.d/truenas-proxmox.list
 
 # Install
 apt update && apt install truenas-proxmox
