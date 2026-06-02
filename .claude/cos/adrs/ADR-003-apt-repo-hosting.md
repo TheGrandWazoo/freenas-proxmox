@@ -1,7 +1,7 @@
 # ADR-003: APT Repository Hosting
 
 **Date**: 2026-05-15  
-**Status**: Accepted  
+**Status**: Superseded by ADR-010  
 **Deciders**: Kevin Adams
 
 ## Context
