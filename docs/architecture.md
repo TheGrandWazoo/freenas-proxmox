@@ -44,7 +44,7 @@ The plugin does NOT manage the iSCSI initiator side. QEMU's built-in libiscsi op
 
 ### What the Plugin Does Not Do
 
-- **Pool listing**: Proxmox's `status()` call returns pool capacity via the TrueNAS API, but ZFS pool enumeration for the "Add Storage" wizard still requires SSH access through PVE's upstream `ZFSPoolPlugin.pm`. This is a Proxmox limitation outside the plugin's scope.
+- **Pool name auto-discovery**: The user types the TrueNAS pool name directly in the Add Storage dialog. The plugin does not enumerate available pools. Pool capacity is returned via the TrueNAS API (`GET /pool/dataset`), not SSH.
 - **Snapshots on PVE 8.x**: The `volume_snapshot` family of methods is defined but will return an unsupported error on PVE 8. PVE 9.0's Snapshot-as-Volume-Chains feature is the target integration point (v3.1.0, ADR-008).
 - **TPM state disks**: swtpm (the virtual TPM backend) cannot use `iscsi://` URIs; it requires a local filesystem path. TPM disks must be placed on a different storage type.
 

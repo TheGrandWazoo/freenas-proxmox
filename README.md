@@ -101,17 +101,15 @@ v3.0 is a fully API-driven custom storage plugin. No SSH keys required.
 >
 > For live VM migration with TPM, the TPM state disk must also be on shared filesystem storage (NFS or CephFS), not on this plugin's storage.
 
-### v2.x (current stable)
+### v2.x (legacy)
 
-1. **SSH keys** configured between Proxmox and TrueNAS — required for ZFS pool listing by the Proxmox core (see the [Proxmox wiki](https://pve.proxmox.com/wiki/Storage:_ZFS_over_iSCSI), section starting with `mkdir /etc/pve/priv/zfs`).
+> v2.x is no longer the recommended version. See [Migrating from v2.x](docs/migrating-from-v2.md).
 
-2. On **TrueNAS**, an iSCSI **target** and **initiator group** must exist and be configured. The plugin manages extents and target-to-extent mappings, but the target itself must be pre-created.
+1. **SSH keys** configured between each Proxmox node and TrueNAS — required by the Proxmox core for ZFS pool listing (see the [Proxmox wiki](https://pve.proxmox.com/wiki/Storage:_ZFS_over_iSCSI), section starting with `mkdir /etc/pve/priv/zfs`).
 
-3. On **TrueNAS SCALE** or **TrueNAS CORE 13+**, generate an API key:
-   - TrueNAS SCALE: *System Settings → API Keys → Add*
-   - TrueNAS CORE 13: *gear icon (top-right) → API Keys → Add*
+2. On **TrueNAS**, a pre-created iSCSI **target** and **initiator group**.
 
-   Copy the key — you will need it during storage configuration in Proxmox.
+3. A TrueNAS API key (SCALE: *System Settings → API Keys*; CORE 13: *gear icon → API Keys*).
 
 ---
 
