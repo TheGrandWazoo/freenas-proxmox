@@ -292,6 +292,89 @@ jobs:
           release: any-version
           file: ${{ needs.build.outputs.transitional_deb_file }}
 
+      - name: Publish to GitHub Pages APT repo
+        if: needs.build.outputs.is_release == 'true'
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+          APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}
+          GH_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+        run: |
+          # Abort clearly if signing key not configured
+          if [[ -z "$APT_SIGNING_KEY" ]]; then
+            echo "::error::APT_SIGNING_KEY secret is not set — run scripts/setup-apt-signing-key.sh and add the secret"
+            exit 1
+          fi
+
+          # Determine major version from package version (e.g. 3.0.0-1 → 3)
+          VERSION="${{ needs.build.outputs.version }}"
+          MAJOR="${VERSION%%.*}"
+
+          # Import GPG signing key
+          echo "$APT_SIGNING_KEY" | base64 -d | gpg --batch --import
+          GPG_KEY_ID="$(gpg --list-secret-keys --with-colons 2>/dev/null \
+            | awk -F: '/^sec/{print $5; exit}')"
+
+          # Checkout gh-pages branch into a temp directory
+          PAGES_DIR="$(mktemp -d)"
+          git clone --branch gh-pages \
+            "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
+            "$PAGES_DIR"
+
+          # Add .deb files to the versioned pool directory
+          mkdir -p "${PAGES_DIR}/pool/v${MAJOR}"
+          cp "${{ needs.build.outputs.deb_file }}" "${PAGES_DIR}/pool/v${MAJOR}/"
+          cp "${{ needs.build.outputs.transitional_deb_file }}" "${PAGES_DIR}/pool/v${MAJOR}/"
+
+          # Install apt tooling
+          sudo apt-get install -y --no-install-recommends dpkg-dev apt-utils
+
+          # Determine which dists to update
+          # v2.x: update v2, main (alias), and v2 (explicit)
+          # v3.x and above: update only the versioned dist
+          if [[ "$MAJOR" == "2" ]]; then
+            DISTS="v2 main"
+          else
+            DISTS="v${MAJOR}"
+          fi
+
+          for DIST in $DISTS; do
+            mkdir -p "${PAGES_DIR}/dists/${DIST}/main/binary-all"
+
+            # Generate Packages file (paths relative to repo root)
+            dpkg-scanpackages --multiversion "${PAGES_DIR}/pool/v${MAJOR}" \
+              | sed "s|^Filename: ${PAGES_DIR}/||" \
+              > "${PAGES_DIR}/dists/${DIST}/main/binary-all/Packages"
+            gzip -kf "${PAGES_DIR}/dists/${DIST}/main/binary-all/Packages"
+
+            # Generate Release file
+            apt-ftparchive \
+              -o "APT::FTPArchive::Release::Origin=truenas-proxmox" \
+              -o "APT::FTPArchive::Release::Label=truenas-proxmox" \
+              -o "APT::FTPArchive::Release::Suite=${DIST}" \
+              -o "APT::FTPArchive::Release::Codename=${DIST}" \
+              -o "APT::FTPArchive::Release::Components=main" \
+              -o "APT::FTPArchive::Release::Architectures=all" \
+              release "${PAGES_DIR}/dists/${DIST}" \
+              > "${PAGES_DIR}/dists/${DIST}/Release"
+
+            # Sign → InRelease
+            gpg --batch --yes \
+              --passphrase "${APT_SIGNING_KEY_PASSPHRASE}" \
+              --default-key "${GPG_KEY_ID}" \
+              --clearsign \
+              -o "${PAGES_DIR}/dists/${DIST}/InRelease" \
+              "${PAGES_DIR}/dists/${DIST}/Release"
+          done
+
+          # Commit and push
+          cd "$PAGES_DIR"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff --staged --quiet || \
+            git commit -m "apt: publish ${VERSION} to dist(s): ${DISTS}"
+          git push
+
       - name: Create draft GitHub Release
         if: needs.build.outputs.is_release == 'true'
         uses: softprops/action-gh-release@v3

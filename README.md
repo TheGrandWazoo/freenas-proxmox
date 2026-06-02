@@ -120,24 +120,51 @@ v3.0 is a fully API-driven custom storage plugin. No SSH keys required.
 
 ## Installation
 
-### Stable Release
-
-Add the repository and install:
+### Stable Release (v3.x)
 
 ```bash
 # Import the GPG key
-curl -fsSL https://dl.cloudsmith.io/public/ksatechnologies/truenas-proxmox/gpg.284C106104A8CE6D.key \
+curl -fsSL https://thegrandwazoo.github.io/freenas-proxmox/public.gpg.key \
   | gpg --dearmor \
-  | tee /usr/share/keyrings/ksatechnologies-truenas-proxmox-keyring.gpg > /dev/null
+  | sudo tee /etc/apt/keyrings/truenas-proxmox.gpg > /dev/null
 
-# Add the repository
-cat > /etc/apt/sources.list.d/ksatechnologies-repo.list << 'EOF'
-deb [signed-by=/usr/share/keyrings/ksatechnologies-truenas-proxmox-keyring.gpg] \
-  https://dl.cloudsmith.io/public/ksatechnologies/truenas-proxmox/deb/debian any-version main
-EOF
+# Add the v3 repository track
+echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
+https://thegrandwazoo.github.io/freenas-proxmox v3 main" \
+  | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
 
 # Install
-apt update && apt install truenas-proxmox
+sudo apt update && sudo apt install truenas-proxmox
+```
+
+`apt upgrade` will deliver v3.x point releases automatically. You will never be
+automatically promoted to a future v4 — that requires changing the dist track in
+your `sources.list` to `v4`.
+
+### Upgrading from v2.x
+
+**v3.0 is a breaking change.** Do not run `apt upgrade` until you have read the
+migration guide — your storage configuration will need to be updated.
+
+See [docs/migrating-from-v2.md](docs/migrating-from-v2.md).
+
+### Staying on v2.x
+
+If you are on v2.x and want to continue receiving v2.x point releases without
+risking a v3 upgrade, switch to the `main` dist track (v2.x only):
+
+```bash
+# Import the GPG key (if not already done)
+curl -fsSL https://thegrandwazoo.github.io/freenas-proxmox/public.gpg.key \
+  | gpg --dearmor \
+  | sudo tee /etc/apt/keyrings/truenas-proxmox.gpg > /dev/null
+
+# Add the v2 repository track
+echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
+https://thegrandwazoo.github.io/freenas-proxmox main main" \
+  | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
+
+sudo apt update
 ```
 
 ### Testing / Beta Release
@@ -145,19 +172,17 @@ apt update && apt install truenas-proxmox
 For early access to new features (may be unstable):
 
 ```bash
-# Import the GPG key
+# Cloudsmith testing channel (beta builds from release/3.x branch)
 curl -fsSL https://dl.cloudsmith.io/public/ksatechnologies/truenas-proxmox-testing/gpg.CACC9EE03F2DFFCC.key \
   | gpg --dearmor \
-  | tee /usr/share/keyrings/ksatechnologies-truenas-proxmox-testing-keyring.gpg > /dev/null
+  | sudo tee /usr/share/keyrings/ksatechnologies-truenas-proxmox-testing-keyring.gpg > /dev/null
 
-# Add the repository
-cat > /etc/apt/sources.list.d/ksatechnologies-testing-repo.list << 'EOF'
+cat > /etc/apt/sources.list.d/truenas-proxmox-testing.list << 'EOF'
 deb [signed-by=/usr/share/keyrings/ksatechnologies-truenas-proxmox-testing-keyring.gpg] \
   https://dl.cloudsmith.io/public/ksatechnologies/truenas-proxmox-testing/deb/debian any-version main
 EOF
 
-# Install
-apt update && apt install truenas-proxmox
+sudo apt update && sudo apt install truenas-proxmox
 ```
 
 ---
