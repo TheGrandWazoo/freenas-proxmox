@@ -58,7 +58,7 @@ Basic auth (`freenas_user` / `freenas_password`) was removed in v3.0. Bearer tok
 
 v3.0 uses the TrueNAS v2.0 REST API exclusively. Supported:
 - TrueNAS CORE 11.3+ (confirmed tested: CORE 13.0-U6)
-- TrueNAS SCALE (confirmed tested: SCALE 24.10 Electric Eel)
+- TrueNAS SCALE (confirmed tested: SCALE 24.10 Electric Eel, SCALE 25.04, SCALE 25.10)
 
 ## Known Issues / Active Work
 
