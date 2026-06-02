@@ -8,7 +8,7 @@ See each [GitHub Release](https://github.com/TheGrandWazoo/truenas-proxmox/relea
 
 ---
 
-## [Unreleased] — v3.0.0
+## [3.0.0] — 2026-05-31
 
 ### Added
 - New `PVE::Storage::Custom::TrueNASPlugin` — proper Proxmox VE custom storage type (no more ZFSPlugin.pm patching)
