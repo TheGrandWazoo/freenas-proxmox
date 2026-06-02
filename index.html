@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>truenas-proxmox APT repository</title>
+  <style>
+    body { font-family: monospace; max-width: 800px; margin: 2em auto; padding: 0 1em; }
+    pre  { background: #f4f4f4; padding: 1em; overflow-x: auto; }
+    h2   { margin-top: 2em; }
+  </style>
+</head>
+<body>
+<h1>truenas-proxmox APT repository</h1>
+<p>
+  Native Proxmox VE storage plugin for TrueNAS iSCSI volumes.<br>
+  Source: <a href="https://github.com/TheGrandWazoo/freenas-proxmox">github.com/TheGrandWazoo/freenas-proxmox</a>
+</p>
+
+<h2>Install (v3.x — current stable)</h2>
+<pre>
+curl -fsSL https://thegrandwazoo.github.io/freenas-proxmox/public.gpg.key \
+  | gpg --dearmor \
+  | sudo tee /etc/apt/keyrings/truenas-proxmox.gpg &gt; /dev/null
+
+echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
+https://thegrandwazoo.github.io/freenas-proxmox v3 main" \
+  | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
+
+sudo apt update
+sudo apt install truenas-proxmox
+</pre>
+
+<h2>Stay on v2.x (existing users)</h2>
+<pre>
+# Replace your existing sources.list entry with:
+deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
+    https://thegrandwazoo.github.io/freenas-proxmox main main
+</pre>
+<p>The <code>main</code> dist only receives v2.x point releases — you will never be automatically upgraded to v3.</p>
+
+<h2>Available dist tracks</h2>
+<table>
+  <tr><th>Dist</th><th>Content</th><th>Use</th></tr>
+  <tr><td><code>v3</code></td><td>v3.x releases</td><td>New installs and v3 upgrades</td></tr>
+  <tr><td><code>main</code></td><td>v2.x releases</td><td>Existing users — backward-compatible</td></tr>
+  <tr><td><code>v2</code></td><td>v2.x releases (alias for main)</td><td>Explicit v2 pin</td></tr>
+</table>
+
+<h2>GPG signing key</h2>
+<pre>
+curl -fsSL https://thegrandwazoo.github.io/freenas-proxmox/public.gpg.key
+</pre>
+</body>
+</html>
