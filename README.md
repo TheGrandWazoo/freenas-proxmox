@@ -162,6 +162,56 @@ https://thegrandwazoo.github.io/freenas-proxmox main main" \
 sudo apt update
 ```
 
+### Migrating from Cloudsmith
+
+> Cloudsmith is being phased out. GitHub Pages is the permanent home for this project's packages.
+
+If you installed from the Cloudsmith apt repo, swap your source to GitHub Pages. Your installed package is not affected — this only changes where future updates come from.
+
+**On v3.x (Cloudsmith stable):**
+
+```bash
+# Remove the old Cloudsmith source
+sudo rm -f /etc/apt/sources.list.d/truenas-proxmox*.list
+sudo rm -f /usr/share/keyrings/ksatechnologies-truenas-proxmox*.gpg
+
+# Import the GitHub Pages GPG key
+curl -fsSL https://thegrandwazoo.github.io/freenas-proxmox/public.gpg.key \
+  | gpg --dearmor \
+  | sudo tee /etc/apt/keyrings/truenas-proxmox.gpg > /dev/null
+
+# Point to the v3 dist track
+echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
+https://thegrandwazoo.github.io/freenas-proxmox v3 main" \
+  | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
+
+sudo apt update
+```
+
+**On v2.x (Cloudsmith stable) — staying on v2:**
+
+```bash
+# Remove the old Cloudsmith source
+sudo rm -f /etc/apt/sources.list.d/freenas-proxmox*.list /etc/apt/sources.list.d/truenas-proxmox*.list
+sudo rm -f /usr/share/keyrings/ksatechnologies-truenas-proxmox*.gpg
+
+# Import the GitHub Pages GPG key
+curl -fsSL https://thegrandwazoo.github.io/freenas-proxmox/public.gpg.key \
+  | gpg --dearmor \
+  | sudo tee /etc/apt/keyrings/truenas-proxmox.gpg > /dev/null
+
+# Point to the v2 dist track (v2.x only — you will never receive a v3 package)
+echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
+https://thegrandwazoo.github.io/freenas-proxmox main main" \
+  | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
+
+sudo apt update
+```
+
+For a full upgrade path matrix — including what to do when v4 ships — see [docs/upgrade-paths.md](docs/upgrade-paths.md).
+
+---
+
 ### Testing / Beta Release
 
 For early access to new features (may be unstable):
