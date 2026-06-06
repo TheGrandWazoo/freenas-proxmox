@@ -117,9 +117,7 @@ cat "$SOURCES_FILE"
 # ── apt update ───────────────────────────────────────────────────────────────
 echo ""
 echo "==> Running apt update..."
-apt-get update -o Dir::Etc::sourcelist="$SOURCES_FILE" \
-               -o Dir::Etc::sourceparts="-" \
-               -o APT::Get::List-Cleanup="0" 2>&1 \
+apt-get update 2>&1 \
   | grep -E "^(Get|Hit|Err|Fetched|W:|E:)" || true
 
 # Confirm the package is visible from the new repo
