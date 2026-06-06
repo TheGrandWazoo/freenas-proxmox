@@ -1,0 +1,42 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Architectures: all
+Codename: v3
+Components: main
+Date: Sat, 06 Jun 2026 16:20:00 +0000
+Label: truenas-proxmox
+Origin: truenas-proxmox
+Suite: v3
+MD5Sum:
+ 7af531b2d4018cbf1d3f5ea3fddaaac6              144 Release
+ dca0455de04a972f30237d77532ccba8             1844 main/binary-all/Packages
+ 218f8740af25348718064ac4cbcb1f43              953 main/binary-all/Packages.gz
+SHA1:
+ 11b904103b591790396f8c021a0919ce77f58cc0              144 Release
+ 76c2b18f5c2b4408ead4536c23dc8d4df2b9a0d3             1844 main/binary-all/Packages
+ e7b066c50e178080eb67e89a0a135e8e47a105a9              953 main/binary-all/Packages.gz
+SHA256:
+ d3e97737ab0eb37813f58f05bda7d99217f988f8502a0c79a015aa106ebdd235              144 Release
+ 2c478d6bd1b14db886c75a0cbdc888a1079ea915fdaea08367b844173fe7f4f8             1844 main/binary-all/Packages
+ d87e79e6c70af20909e370564f51e7319ede4a56cd657d457a772010ffd3d0c3              953 main/binary-all/Packages.gz
+SHA512:
+ 1fcc9378f8398a00d5fd27033eab8409fa0bcf7addec98dff1b1956ffc821d7749918f746f5ec269432ad459ffa9b470bd537b35ff1b0c8a64464742224c6da6              144 Release
+ 01602d4bc3e97377fdedc22fa8d806cba3ddffc3fcf8bfb314c5942d3ab0ccd837f7fa46d55f76c517beaaaca64c0c717e65071186afd493185502ae37868c9a             1844 main/binary-all/Packages
+ d4cfe68764329cbcc33f2f32b7b4112c1874da8f436e11b18e3cb54933beeeaa6926dbf07556b6f05553186986d849c9874a23f42f1a9c465ff8f8ea99205c30              953 main/binary-all/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEEB5yWPw3rhXMeE7xxiWsCIO3Yy24FAmokSLAACgkQiWsCIO3Y
+y24F7w//Qekbg+/Gb5jnUYPz1UsvmcPYizHhjMTmF1aZJAfRo91YcHIFjqcYrPsX
+1EWm0tukMahf/ciJEdthyrfGb+KSKWfECGmcSAIebZQuYdzMzPLSK1w35ogleY0j
+yjhSNc47b2phiTWs5PN38ZogLDwB1aPMZwiS7EKhfMNI1zG9rYqLJTUCJUTRO0OB
+3/obNZQNCh51xlXsi8hdsv9TpOhiiGvhI3SEamcFlSFgPJEZZb0LV4iVTr8asE9I
+a0YCD7sjZOW1JluJZnn/ReYOxt3ry86lQFcqTsw0pwWD0yHS/W2UZhaoqWJKC3l6
+8fweKmvoFiVL5IBW+ZkxmtYNNitErPkzD0AOuqgeylXm/u580N/dwRlUDHa3sWgZ
+rbDVp5xRzMWuCLUHE2bw7/2gZB3hpGfpq1IlvJEh5nVhwiynXXxzoFiE/SaMkaPc
+nEDSJtFrgvR9f+zGSDbg72kVGwjea3Ua+w0JbHgcNO/lBVyP8Txcy21uw4QnIT/8
+8hBNvn8kNroDEhlpVciakKqbuLlPHwo8LEvbzejdCYK7l/R370lHFavnixO6Z2yj
+SGuL2Eu78e79OD70RoHSC0RtHjCDhzZWcE9wutq0Mwo/PhJnqp2IhcNpFJzf5D3N
+C8fZaQLD1hS/r+j+GiBYnoeL64YdWcS7qQFnheEQbLbjH/EX5ts=
+=MgJJ
+-----END PGP SIGNATURE-----
