@@ -1,0 +1,58 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Architectures: all amd64 arm64
+Codename: main
+Components: main
+Date: Sat, 06 Jun 2026 18:54:34 +0000
+Label: truenas-proxmox
+Origin: truenas-proxmox
+Suite: main
+MD5Sum:
+ f7f5381eeab294525860ba0feced2e19              160 Release
+ 2b9a10420fc2b6c343ff6431085cebe6              818 main/binary-all/Packages
+ b9fb2a03b91188350e1998d7e880f7b9              583 main/binary-all/Packages.gz
+ d41d8cd98f00b204e9800998ecf8427e                0 main/binary-amd64/Packages
+ 9f2b545a607c80141607d40c035e672f               29 main/binary-amd64/Packages.gz
+ d41d8cd98f00b204e9800998ecf8427e                0 main/binary-arm64/Packages
+ 9f2b545a607c80141607d40c035e672f               29 main/binary-arm64/Packages.gz
+SHA1:
+ 001cb53d5b7ea3453a9359e9262577d108d94bcb              160 Release
+ bb204a2c93a554eb8befc8187e92eaa7d8481dbe              818 main/binary-all/Packages
+ e57a79430d9026c575e34c1fc765384f6ad29442              583 main/binary-all/Packages.gz
+ da39a3ee5e6b4b0d3255bfef95601890afd80709                0 main/binary-amd64/Packages
+ 6d913f84f800b150bd8b9101b0bfe389835a4882               29 main/binary-amd64/Packages.gz
+ da39a3ee5e6b4b0d3255bfef95601890afd80709                0 main/binary-arm64/Packages
+ 6d913f84f800b150bd8b9101b0bfe389835a4882               29 main/binary-arm64/Packages.gz
+SHA256:
+ 94283ee68cfa9c5e4e8af90af13e151ea802fe5b728a10cb6aafe50e30da770e              160 Release
+ 43dfad292a1176a02050181b2db3f5f9293591426d7ff0b54bbef37a58e9a3ea              818 main/binary-all/Packages
+ 03f66b5bb60eee272c2cb8e894713cd34bd02c8928fe03668ee8273d7a8aeabf              583 main/binary-all/Packages.gz
+ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 main/binary-amd64/Packages
+ 6af2b29cd31d06d38a3fe6e93d3f572c0a4a8251ad68a4bb14d385c5ca84f8fc               29 main/binary-amd64/Packages.gz
+ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 main/binary-arm64/Packages
+ 6af2b29cd31d06d38a3fe6e93d3f572c0a4a8251ad68a4bb14d385c5ca84f8fc               29 main/binary-arm64/Packages.gz
+SHA512:
+ 4414c0353a187d34aa87927bff5e5445e714b23379eeabe5c066ac4d663983544192134c621f985557e7c90d2367fd614ea13a65726a4c8bcb38d8209dce000a              160 Release
+ ee84656df83b2713f82be2485c2ae57a0d5dfaa2f0b171c7ca82ced5356244f88ea97c417b550002f20b1612914dcac96fb408caee1a75deea0a52c9df3fd547              818 main/binary-all/Packages
+ 0369e84b55ec8147de9c1c65f7a99056151fd580b83c87e998f94e2c9adfc1ba9b9b1799e78b6bff59e31bad29e309ef5a657771d6516df120bcae2dd596811c              583 main/binary-all/Packages.gz
+ cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e                0 main/binary-amd64/Packages
+ df103477c4cf522025ff84ba73a125f93fa0e962910147ba8a4040fe960660f15f30364124173488cb590105e67098abb007d78b12358de9258c3b4af8aeb2b1               29 main/binary-amd64/Packages.gz
+ cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e                0 main/binary-arm64/Packages
+ df103477c4cf522025ff84ba73a125f93fa0e962910147ba8a4040fe960660f15f30364124173488cb590105e67098abb007d78b12358de9258c3b4af8aeb2b1               29 main/binary-arm64/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEEB5yWPw3rhXMeE7xxiWsCIO3Yy24FAmokbOoACgkQiWsCIO3Y
+y26yXA/+OFYrssWKd5Ar36lk1QirYcU+RXkxqlAdO88bK2UfQxdvXRyfmexxtx2w
+H/u59l8kOQQtOUyi2OIUxGgvkXKLHTTt3GgODOar8oOIcu+z18THDfBFDLc6Vp+Y
+yCpI2QUa8xHPoDr5Ud1yYZZOmhxskmu2qizVznL3zw3vrmiNsm0YSALeOJDBO15B
+PtXffTZmGsQmAiiTlxtwC6/b6hkWe3cXhdpllBd/SN/Z3rogsuzlSEKRABAVhWz2
+dyhGMyeosD/14i1Av3dnxlnuPXd+RkbMM3nO99xO+FgK4hpSGWWFVy5y+gpNLO3+
+Q1uWnVuKfLyZZqpFEl5Okt32eszX9RcUCQUMw4aPiWlVUXZZDMzHQ9lbN952Iakm
+TM7J3Nk2GaKShaX7DzX3auMlfOCzMRE3xK8khqDIwKGaVgb/qMl7lQIINYEwaeCA
+4vV/GDTv6rFHWJmrHIMYiGi75tLueHL9Xu+mJpq/yT6HdWiTEjSmTJpB/ir2cty8
+0GWIS3TmEoBmbR2nTTcfFkqfJa+RRoW99Zv29kDnOFIXFEPZOGD4IZGsvFu/n+Bo
+x6T3Xf4MLPi3xGVJmmffKM25HUeXhr5LOOnBCbriE/YqYqWralmG+eSh+y1oYhEK
+s+BRXyEUkz5z+yes8rtUp0HSGVIka6iv4PHpXZm3Gc8yh3bvBXA=
+=kVOb
+-----END PGP SIGNATURE-----

@@ -1,0 +1,21 @@
+Package: freenas-proxmox
+Version: 2.4.0-1
+Architecture: all
+Maintainer: KSA Technologies, LLC <theprofessor@ksatechnologies.com>
+Depends: librest-client-perl, patch
+pool/v2/freenas-proxmox_2.4.0-1_all.deb
+Size: 22346
+MD5sum: af409b859f68508848f8ff9291e2e58c
+SHA1: 7176c907b256d28c118ba3bb7613e127285832af
+SHA256: 84103d32feada79e2aa26bf3d3064583e27f202c39009aff50a9cb2c372b4a09
+Section: perl
+Priority: optional
+Homepage: https://github.com/TheGrandWazoo/freenas-proxmox
+Description: TrueNAS ZFS-over-iSCSI Plugin for Proxmox VE
+ Manages iSCSI LUNs on TrueNAS (CORE and SCALE) via the TrueNAS REST API.
+ Supports Bearer Token and username/password authentication.
+ No SSH-based LUN management required.
+ .
+ Licensed under the GNU Affero General Public License v3 (AGPL-3.0).
+ Copyright (c) 2020 KSA Technologies, LLC.
+
