@@ -1,23 +1,39 @@
-Architectures: all
+Architectures: all amd64 arm64
 Codename: v3
 Components: main
-Date: Sat, 06 Jun 2026 16:20:00 +0000
+Date: Sat, 06 Jun 2026 18:27:25 +0000
 Label: truenas-proxmox
 Origin: truenas-proxmox
 Suite: v3
 MD5Sum:
- 7af531b2d4018cbf1d3f5ea3fddaaac6              144 Release
+ a8d1eb5a67c117fcb2a6548b8910173d              156 Release
  dca0455de04a972f30237d77532ccba8             1844 main/binary-all/Packages
  218f8740af25348718064ac4cbcb1f43              953 main/binary-all/Packages.gz
+ d41d8cd98f00b204e9800998ecf8427e                0 main/binary-amd64/Packages
+ 4bf1c2497f3e7244f55cb9f04205665d               29 main/binary-amd64/Packages.gz
+ d41d8cd98f00b204e9800998ecf8427e                0 main/binary-arm64/Packages
+ 4bf1c2497f3e7244f55cb9f04205665d               29 main/binary-arm64/Packages.gz
 SHA1:
- 11b904103b591790396f8c021a0919ce77f58cc0              144 Release
+ de8a96372ce3c0a96d650ab5591c4ccd1f60f8bd              156 Release
  76c2b18f5c2b4408ead4536c23dc8d4df2b9a0d3             1844 main/binary-all/Packages
  e7b066c50e178080eb67e89a0a135e8e47a105a9              953 main/binary-all/Packages.gz
+ da39a3ee5e6b4b0d3255bfef95601890afd80709                0 main/binary-amd64/Packages
+ 3cfe25af58d1d79df939a6b394dd3234137c3564               29 main/binary-amd64/Packages.gz
+ da39a3ee5e6b4b0d3255bfef95601890afd80709                0 main/binary-arm64/Packages
+ 3cfe25af58d1d79df939a6b394dd3234137c3564               29 main/binary-arm64/Packages.gz
 SHA256:
- d3e97737ab0eb37813f58f05bda7d99217f988f8502a0c79a015aa106ebdd235              144 Release
+ d0702baa3dd1358bd17e4251594047d4752ebeb7de2c2f9214aa2f2093b5e2a8              156 Release
  2c478d6bd1b14db886c75a0cbdc888a1079ea915fdaea08367b844173fe7f4f8             1844 main/binary-all/Packages
  d87e79e6c70af20909e370564f51e7319ede4a56cd657d457a772010ffd3d0c3              953 main/binary-all/Packages.gz
+ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 main/binary-amd64/Packages
+ 03cc239163c2a9a9d39b150d16ca912a53c62c743d3c7948769ffd899625ce24               29 main/binary-amd64/Packages.gz
+ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 main/binary-arm64/Packages
+ 03cc239163c2a9a9d39b150d16ca912a53c62c743d3c7948769ffd899625ce24               29 main/binary-arm64/Packages.gz
 SHA512:
- 1fcc9378f8398a00d5fd27033eab8409fa0bcf7addec98dff1b1956ffc821d7749918f746f5ec269432ad459ffa9b470bd537b35ff1b0c8a64464742224c6da6              144 Release
+ c5f1e9569abca531cdc7f99df8c694932b1168a48bf96243da1ab2e7c5d401bd246998c0c008080b51a73cd004d6e7d8662f21813ad405efc45e175c9281e0c7              156 Release
  01602d4bc3e97377fdedc22fa8d806cba3ddffc3fcf8bfb314c5942d3ab0ccd837f7fa46d55f76c517beaaaca64c0c717e65071186afd493185502ae37868c9a             1844 main/binary-all/Packages
  d4cfe68764329cbcc33f2f32b7b4112c1874da8f436e11b18e3cb54933beeeaa6926dbf07556b6f05553186986d849c9874a23f42f1a9c465ff8f8ea99205c30              953 main/binary-all/Packages.gz
+ cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e                0 main/binary-amd64/Packages
+ 79e28444c4d33862ab8a5c9f9f6acfdd8fcb7fd899cf9899b1e1a2d97c07f21a476d5c0d0d5636ea2422fa16672cab3a071608c2d00852b54608f83eda413736               29 main/binary-amd64/Packages.gz
+ cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e                0 main/binary-arm64/Packages
+ 79e28444c4d33862ab8a5c9f9f6acfdd8fcb7fd899cf9899b1e1a2d97c07f21a476d5c0d0d5636ea2422fa16672cab3a071608c2d00852b54608f83eda413736               29 main/binary-arm64/Packages.gz
