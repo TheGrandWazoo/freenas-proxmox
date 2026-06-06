@@ -269,6 +269,12 @@ jobs:
           name: packages-${{ needs.build.outputs.version }}
 
       - name: Publish truenas-proxmox to Cloudsmith
+        # Stable v3+ goes to GitHub Pages only. Keep Cloudsmith for:
+        #   - v2.x stable releases (existing user base)
+        #   - beta/alpha/dev builds (testing channel, until GitHub Pages testing track ships)
+        if: >-
+          needs.build.outputs.channel != 'stable' ||
+          startsWith(needs.build.outputs.version, '2.')
         uses: cloudsmith-io/action@v0.6.14
         with:
           api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
@@ -281,6 +287,9 @@ jobs:
           file: ${{ needs.build.outputs.deb_file }}
 
       - name: Publish transitional freenas-proxmox to Cloudsmith
+        if: >-
+          needs.build.outputs.channel != 'stable' ||
+          startsWith(needs.build.outputs.version, '2.')
         uses: cloudsmith-io/action@v0.6.14
         with:
           api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
