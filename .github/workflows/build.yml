@@ -339,12 +339,22 @@ jobs:
 
           for DIST in $DISTS; do
             mkdir -p "${PAGES_DIR}/dists/${DIST}/main/binary-all"
+            mkdir -p "${PAGES_DIR}/dists/${DIST}/main/binary-amd64"
+            mkdir -p "${PAGES_DIR}/dists/${DIST}/main/binary-arm64"
 
             # Generate Packages file (paths relative to repo root)
             dpkg-scanpackages --multiversion "${PAGES_DIR}/pool/v${MAJOR}" \
               | sed "s|^Filename: ${PAGES_DIR}/||" \
               > "${PAGES_DIR}/dists/${DIST}/main/binary-all/Packages"
             gzip -kf "${PAGES_DIR}/dists/${DIST}/main/binary-all/Packages"
+
+            # Empty arch-specific Packages — all our packages are Architecture: all;
+            # these files silence the apt "doesn't support architecture" warning on
+            # amd64 and arm64 hosts without duplicating package entries.
+            touch "${PAGES_DIR}/dists/${DIST}/main/binary-amd64/Packages"
+            gzip -kf "${PAGES_DIR}/dists/${DIST}/main/binary-amd64/Packages"
+            touch "${PAGES_DIR}/dists/${DIST}/main/binary-arm64/Packages"
+            gzip -kf "${PAGES_DIR}/dists/${DIST}/main/binary-arm64/Packages"
 
             # Generate Release file
             apt-ftparchive \
@@ -353,7 +363,7 @@ jobs:
               -o "APT::FTPArchive::Release::Suite=${DIST}" \
               -o "APT::FTPArchive::Release::Codename=${DIST}" \
               -o "APT::FTPArchive::Release::Components=main" \
-              -o "APT::FTPArchive::Release::Architectures=all" \
+              -o "APT::FTPArchive::Release::Architectures=all amd64 arm64" \
               release "${PAGES_DIR}/dists/${DIST}" \
               > "${PAGES_DIR}/dists/${DIST}/Release"
 
