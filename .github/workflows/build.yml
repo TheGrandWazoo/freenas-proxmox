@@ -352,7 +352,7 @@ jobs:
 
             # Generate Packages file (paths relative to repo root)
             dpkg-scanpackages --multiversion "${PAGES_DIR}/pool/v${MAJOR}" \
-              | sed "s|^Filename: ${PAGES_DIR}/||" \
+              | sed "s|^Filename: ${PAGES_DIR}/|Filename: |" \
               > "${PAGES_DIR}/dists/${DIST}/main/binary-all/Packages"
             gzip -kf "${PAGES_DIR}/dists/${DIST}/main/binary-all/Packages"
 
@@ -432,7 +432,7 @@ jobs:
           mkdir -p "${PAGES_DIR}/dists/${DIST}/main/binary-arm64"
 
           dpkg-scanpackages --multiversion "${PAGES_DIR}/pool/testing" \
-            | sed "s|^Filename: ${PAGES_DIR}/||" \
+            | sed "s|^Filename: ${PAGES_DIR}/|Filename: |" \
             > "${PAGES_DIR}/dists/${DIST}/main/binary-all/Packages"
           gzip -kf "${PAGES_DIR}/dists/${DIST}/main/binary-all/Packages"
 
