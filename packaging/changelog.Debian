@@ -1,0 +1,27 @@
+truenas-proxmox (3.0.0-1) bookworm; urgency=medium
+
+  * Full rewrite as native PVE::Storage::Custom plugin — no PVE core patches
+  * Bearer token authentication only; basic auth (freenas_user/password) removed
+  * Per-VM dedicated iSCSI targets via TrueNAS REST API v2.0
+  * QEMU connects via iscsi:// directly — no iscsiadm, no kernel iSCSI sessions
+  * Supports TrueNAS CORE 13.0-U6 and SCALE 24.10, 25.04, 25.10
+  * Supports Proxmox VE 8.x and 9.x
+  * Package renamed from freenas-proxmox to truenas-proxmox; transitional package provided
+  * alloc_image partial-failure rollback (cleanup orphaned TrueNAS resources)
+  * Migration docs: beginner, advanced, troubleshooting guides
+
+ -- KSA Technologies, LLC <theprofessor@ksatechnologies.com>  Sun, 31 May 2026 00:00:00 +0000
+
+truenas-proxmox (2.4.0-1) bookworm; urgency=low
+
+  * Quality of life improvements and minor fixes
+
+ -- KSA Technologies, LLC <theprofessor@ksatechnologies.com>  Fri, 22 May 2026 00:00:00 +0000
+
+truenas-proxmox (2.3.0-1) bookworm; urgency=medium
+
+  * Hardening and stability improvements
+  * Bearer token authentication support
+  * Build and CI infrastructure improvements
+
+ -- KSA Technologies, LLC <theprofessor@ksatechnologies.com>  Mon, 19 May 2026 00:00:00 +0000

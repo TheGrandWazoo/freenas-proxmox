@@ -1,0 +1,19 @@
+freenas-proxmox (3.0.0-1) bookworm; urgency=low
+
+  * Transitional package — installs truenas-proxmox automatically
+  * The freenas-proxmox package name is retired; truenas-proxmox is the successor
+
+ -- KSA Technologies, LLC <theprofessor@ksatechnologies.com>  Sun, 31 May 2026 00:00:00 +0000
+
+freenas-proxmox (2.4.0-1) bookworm; urgency=low
+
+  * Quality of life improvements and minor fixes
+
+ -- KSA Technologies, LLC <theprofessor@ksatechnologies.com>  Fri, 22 May 2026 00:00:00 +0000
+
+freenas-proxmox (2.3.0-1) bookworm; urgency=medium
+
+  * Hardening and stability improvements
+  * Bearer token authentication support
+
+ -- KSA Technologies, LLC <theprofessor@ksatechnologies.com>  Mon, 19 May 2026 00:00:00 +0000

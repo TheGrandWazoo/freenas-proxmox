@@ -169,6 +169,11 @@ jobs:
           cp ui/truenas-storage.js                     "${STAGING}/usr/share/truenas-proxmox/truenas-storage.js"
           cp ui/truenas-storage-help.html              "${STAGING}/usr/share/truenas-proxmox/truenas-storage-help.html"
 
+          # Debian changelog (required by Debian policy §12.7)
+          mkdir -p "${STAGING}/usr/share/doc/truenas-proxmox"
+          gzip -9c packaging/changelog.Debian \
+            > "${STAGING}/usr/share/doc/truenas-proxmox/changelog.Debian.gz"
+
           echo "==> Package contents:"
           find "${STAGING}" | sort
 
@@ -184,6 +189,11 @@ jobs:
 
           cp packaging/DEBIAN-transitional/postinst "${STAGING}/DEBIAN/postinst"
           chmod 0755 "${STAGING}/DEBIAN/postinst"
+
+          # Debian changelog
+          mkdir -p "${STAGING}/usr/share/doc/freenas-proxmox"
+          gzip -9c packaging/DEBIAN-transitional/changelog.Debian \
+            > "${STAGING}/usr/share/doc/freenas-proxmox/changelog.Debian.gz"
 
           echo "==> Transitional package contents:"
           find "${STAGING}" | sort
