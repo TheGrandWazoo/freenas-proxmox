@@ -3,7 +3,7 @@ Version: 3.0.0-1
 Architecture: all
 Maintainer: KSA Technologies, LLC <theprofessor@ksatechnologies.com>
 Depends: truenas-proxmox (>= 3.0.0)
-pool/v3/freenas-proxmox_3.0.0-1_all.deb
+Filename: pool/v3/freenas-proxmox_3.0.0-1_all.deb
 Size: 1090
 MD5sum: 70e4122ac85b691d01e475a0e04cc415
 SHA1: 5d18fce8ebd168f454b03da7349d55b5038ab8b7
@@ -27,7 +27,7 @@ Maintainer: KSA Technologies, LLC <theprofessor@ksatechnologies.com>
 Depends: librest-client-perl, open-iscsi
 Breaks: freenas-proxmox (<< 3.0.0)
 Replaces: freenas-proxmox
-pool/v3/truenas-proxmox_3.0.0-1_all.deb
+Filename: pool/v3/truenas-proxmox_3.0.0-1_all.deb
 Size: 13964
 MD5sum: 5b528010f84a736e7101e09cafcfd07c
 SHA1: ee16bd67412d47e4ed3b8ae6541f7a877daad4d6

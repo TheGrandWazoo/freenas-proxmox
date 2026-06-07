@@ -3,7 +3,7 @@ Version: 2.4.0-1
 Architecture: all
 Maintainer: KSA Technologies, LLC <theprofessor@ksatechnologies.com>
 Depends: librest-client-perl, patch
-pool/v2/freenas-proxmox_2.4.0-1_all.deb
+Filename: pool/v2/freenas-proxmox_2.4.0-1_all.deb
 Size: 22346
 MD5sum: af409b859f68508848f8ff9291e2e58c
 SHA1: 7176c907b256d28c118ba3bb7613e127285832af
