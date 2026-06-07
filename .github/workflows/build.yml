@@ -405,8 +405,8 @@ jobs:
 
       - name: Publish to GitHub Pages testing dist
         if: >-
-          needs.build.outputs.channel == 'beta' ||
-          needs.build.outputs.channel == 'alpha'
+          needs.build.outputs.channel == 'testing' ||
+          needs.build.outputs.channel == 'development'
         env:
           APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
           APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}

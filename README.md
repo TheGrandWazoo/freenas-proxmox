@@ -1,9 +1,9 @@
 # TrueNAS ZFS-over-iSCSI Plugin for Proxmox VE
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/TheGrandWazoo/truenas-proxmox?sort=semver)](https://github.com/TheGrandWazoo/truenas-proxmox/releases/latest)
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/TheGrandWazoo/truenas-proxmox/build.yml?label=build)](https://github.com/TheGrandWazoo/truenas-proxmox/actions/workflows/build.yml)
-[![GitHub issues](https://img.shields.io/github/issues/TheGrandWazoo/truenas-proxmox)](https://github.com/TheGrandWazoo/truenas-proxmox/issues)
+[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/TheGrandWazoo/freenas-proxmox?sort=semver)](https://github.com/TheGrandWazoo/freenas-proxmox/releases/latest)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/TheGrandWazoo/freenas-proxmox/build.yml?branch=release%2F3.x&label=build)](https://github.com/TheGrandWazoo/freenas-proxmox/actions/workflows/build.yml)
+[![GitHub issues](https://img.shields.io/github/issues/TheGrandWazoo/freenas-proxmox)](https://github.com/TheGrandWazoo/freenas-proxmox/issues)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/TheGrandWazoo?label=Sponsors)](https://github.com/sponsors/TheGrandWazoo)
 
 > This plugin is maintained by one person and has 4 million downloads — used in production at ISPs and MSPs worldwide. If it saves you time or headaches, [please consider sponsoring](https://github.com/sponsors/TheGrandWazoo) to keep it actively maintained and funded.
