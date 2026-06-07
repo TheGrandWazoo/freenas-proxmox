@@ -269,12 +269,11 @@ jobs:
           name: packages-${{ needs.build.outputs.version }}
 
       - name: Publish truenas-proxmox to Cloudsmith
-        # Stable v3+ goes to GitHub Pages only. Keep Cloudsmith for:
-        #   - v2.x stable releases (existing user base)
-        #   - beta/alpha/dev builds (testing channel, until GitHub Pages testing track ships)
+        # Cloudsmith now serves v2.x stable only. v3+ stable → GitHub Pages.
+        # beta/alpha → GitHub Pages testing dist (see step below).
         if: >-
-          needs.build.outputs.channel != 'stable' ||
-          startsWith(needs.build.outputs.version, '2.')
+          startsWith(needs.build.outputs.version, '2.') &&
+          needs.build.outputs.channel == 'stable'
         uses: cloudsmith-io/action@v0.6.14
         with:
           api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
@@ -288,8 +287,8 @@ jobs:
 
       - name: Publish transitional freenas-proxmox to Cloudsmith
         if: >-
-          needs.build.outputs.channel != 'stable' ||
-          startsWith(needs.build.outputs.version, '2.')
+          startsWith(needs.build.outputs.version, '2.') &&
+          needs.build.outputs.channel == 'stable'
         uses: cloudsmith-io/action@v0.6.14
         with:
           api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
@@ -392,6 +391,79 @@ jobs:
           git add .
           git diff --staged --quiet || \
             git commit -m "apt: publish ${VERSION} to dist(s): ${DISTS}"
+          git push
+
+      - name: Publish to GitHub Pages testing dist
+        if: >-
+          needs.build.outputs.channel == 'beta' ||
+          needs.build.outputs.channel == 'alpha'
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+          APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}
+          GH_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+        run: |
+          if [[ -z "$APT_SIGNING_KEY" ]]; then
+            echo "::error::APT_SIGNING_KEY secret is not set"
+            exit 1
+          fi
+
+          VERSION="${{ needs.build.outputs.version }}"
+
+          echo "$APT_SIGNING_KEY" | base64 -d | gpg --batch --import
+          GPG_KEY_ID="$(gpg --list-secret-keys --with-colons 2>/dev/null \
+            | awk -F: '/^sec/{print $5; exit}')"
+
+          PAGES_DIR="$(mktemp -d)"
+          git clone --branch gh-pages \
+            "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
+            "$PAGES_DIR"
+
+          # Replace pool/testing/ contents with the latest build only
+          rm -rf "${PAGES_DIR}/pool/testing"
+          mkdir -p "${PAGES_DIR}/pool/testing"
+          cp "${{ needs.build.outputs.deb_file }}" "${PAGES_DIR}/pool/testing/"
+          cp "${{ needs.build.outputs.transitional_deb_file }}" "${PAGES_DIR}/pool/testing/"
+
+          sudo apt-get install -y --no-install-recommends dpkg-dev apt-utils
+
+          DIST="testing"
+          mkdir -p "${PAGES_DIR}/dists/${DIST}/main/binary-all"
+          mkdir -p "${PAGES_DIR}/dists/${DIST}/main/binary-amd64"
+          mkdir -p "${PAGES_DIR}/dists/${DIST}/main/binary-arm64"
+
+          dpkg-scanpackages --multiversion "${PAGES_DIR}/pool/testing" \
+            | sed "s|^Filename: ${PAGES_DIR}/||" \
+            > "${PAGES_DIR}/dists/${DIST}/main/binary-all/Packages"
+          gzip -kf "${PAGES_DIR}/dists/${DIST}/main/binary-all/Packages"
+
+          touch "${PAGES_DIR}/dists/${DIST}/main/binary-amd64/Packages"
+          gzip -kf "${PAGES_DIR}/dists/${DIST}/main/binary-amd64/Packages"
+          touch "${PAGES_DIR}/dists/${DIST}/main/binary-arm64/Packages"
+          gzip -kf "${PAGES_DIR}/dists/${DIST}/main/binary-arm64/Packages"
+
+          apt-ftparchive \
+            -o "APT::FTPArchive::Release::Origin=truenas-proxmox" \
+            -o "APT::FTPArchive::Release::Label=truenas-proxmox" \
+            -o "APT::FTPArchive::Release::Suite=${DIST}" \
+            -o "APT::FTPArchive::Release::Codename=${DIST}" \
+            -o "APT::FTPArchive::Release::Components=main" \
+            -o "APT::FTPArchive::Release::Architectures=all amd64 arm64" \
+            release "${PAGES_DIR}/dists/${DIST}" \
+            > "${PAGES_DIR}/dists/${DIST}/Release"
+
+          gpg --batch --yes \
+            --passphrase "${APT_SIGNING_KEY_PASSPHRASE}" \
+            --default-key "${GPG_KEY_ID}" \
+            --clearsign \
+            -o "${PAGES_DIR}/dists/${DIST}/InRelease" \
+            "${PAGES_DIR}/dists/${DIST}/Release"
+
+          cd "$PAGES_DIR"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff --staged --quiet || \
+            git commit -m "apt: publish ${VERSION} to testing dist"
           git push
 
       - name: Create draft GitHub Release

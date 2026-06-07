@@ -214,21 +214,24 @@ For a full upgrade path matrix — including what to do when v4 ships — see [d
 
 ### Testing / Beta Release
 
-For early access to new features (may be unstable):
+For early access to new features (may be unstable). Beta builds are published on
+every push to `release/3.x` — always the latest build, not accumulated history.
 
 ```bash
-# Cloudsmith testing channel (beta builds from release/3.x branch)
-curl -fsSL https://dl.cloudsmith.io/public/ksatechnologies/truenas-proxmox-testing/gpg.CACC9EE03F2DFFCC.key \
+# Import the GPG key (skip if already done for the stable track)
+curl -fsSL https://thegrandwazoo.github.io/freenas-proxmox/public.gpg.key \
   | gpg --dearmor \
-  | sudo tee /usr/share/keyrings/ksatechnologies-truenas-proxmox-testing-keyring.gpg > /dev/null
+  | sudo tee /etc/apt/keyrings/truenas-proxmox.gpg > /dev/null
 
-cat > /etc/apt/sources.list.d/truenas-proxmox-testing.list << 'EOF'
-deb [signed-by=/usr/share/keyrings/ksatechnologies-truenas-proxmox-testing-keyring.gpg] \
-  https://dl.cloudsmith.io/public/ksatechnologies/truenas-proxmox-testing/deb/debian any-version main
-EOF
+# Add the testing dist track
+echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
+https://thegrandwazoo.github.io/freenas-proxmox testing main" \
+  | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
 
 sudo apt update && sudo apt install truenas-proxmox
 ```
+
+To switch back to stable, replace `testing` with `v3` in your sources.list and run `apt update`.
 
 ---
 
