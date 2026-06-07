@@ -58,12 +58,20 @@ case "$MAJOR" in
     ;;
 esac
 
-# ── Check if already on GitHub Pages ─────────────────────────────────────────
-if grep -qr "$GITHUB_PAGES_BASE" /etc/apt/sources.list.d/ 2>/dev/null; then
-  echo "Already configured to use GitHub Pages apt repo — nothing to do."
+# ── Check if already on GitHub Pages with the correct dist track ─────────────
+if grep -qrF "$GITHUB_PAGES_BASE $DIST main" /etc/apt/sources.list.d/ 2>/dev/null; then
+  echo "Already configured correctly for GitHub Pages (dist: $DIST) — nothing to do."
   echo "Current source:"
-  grep -r "$GITHUB_PAGES_BASE" /etc/apt/sources.list.d/
+  grep -rF "$GITHUB_PAGES_BASE" /etc/apt/sources.list.d/
   exit 0
+fi
+
+# GitHub Pages is configured but with the wrong dist track — fix it
+if grep -qr "$GITHUB_PAGES_BASE" /etc/apt/sources.list.d/ 2>/dev/null; then
+  echo "GitHub Pages is configured but with the wrong dist track — correcting..."
+  WRONG=$(grep -rl "$GITHUB_PAGES_BASE" /etc/apt/sources.list.d/)
+  echo "  Removing: $WRONG"
+  echo "$WRONG" | xargs rm -f
 fi
 
 # ── Find and remove Cloudsmith sources ───────────────────────────────────────

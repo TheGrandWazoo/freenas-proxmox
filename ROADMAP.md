@@ -4,53 +4,74 @@ This file captures release scope, business decisions, and deferred items. It is 
 
 ---
 
-## Current Release — v3.0.0 (TrueNAS Custom Plugin)
+## Released — v3.0.0 (TrueNAS Custom Plugin)
 
-**Branch:** `release/3.x`  
-**Status:** Code complete — blocked on #266 (PVE 9 VM start failure) before tagging  
-**Target:** Ship before PVE 8 EOL (2026-08-31)
+**Released:** 2026-05-31  
+**Branch:** `release/3.x` (default branch)  
+**GitHub Release:** https://github.com/TheGrandWazoo/freenas-proxmox/releases/tag/v3.0.0
 
 Full rewrite as a native `PVE::Storage::Custom` plugin. No patching of PVE files, no SSH, full TrueNAS REST API, bearer token auth only.
 
-### Blocking — must fix before v3.0.0 tag
+### Confirmed tested
 
-None. All blocking issues resolved.
+| Component | Versions |
+|-----------|---------|
+| Proxmox VE | 8.4.x, 9.2.x |
+| TrueNAS CORE | 13.0-U6 |
+| TrueNAS SCALE | 24.10 Electric Eel, 25.04, 25.10 |
 
-### Pre-release housekeeping (non-blocking, do before tag)
+### What shipped
 
-| Task | Status |
-|------|--------|
-| Write ADR-009 superseding ADR-008 — PVE 9 support confirmed, fix approach, snapshot deferred | Pending |
-| Close epic #219 | Pending |
-| File issue for "older storage API" warning — api() version bump for PVE 9 | Pending |
+| # | Fix |
+|---|-----|
+| [#266](https://github.com/TheGrandWazoo/freenas-proxmox/issues/266) | PVE 9: `lun` string vs integer in QEMU blockdev JSON |
+| [#269](https://github.com/TheGrandWazoo/freenas-proxmox/issues/269) | SCALE 25.10 strict Pydantic rejects volsize as string |
+| [#267](https://github.com/TheGrandWazoo/freenas-proxmox/issues/267) | free_image 422 on targetextent delete when VM is running |
+| [#265](https://github.com/TheGrandWazoo/freenas-proxmox/issues/265) | Loop over all targetextent rows in free_image |
+| [#264](https://github.com/TheGrandWazoo/freenas-proxmox/issues/264) | SCALE 25.04 integer type coercion + alias uniqueness |
+| [#261](https://github.com/TheGrandWazoo/freenas-proxmox/issues/261) | API token keyfile (`/etc/pve/priv/truenas-<id>.key`) |
+| [#262](https://github.com/TheGrandWazoo/freenas-proxmox/issues/262) | Package rename: `freenas-proxmox` → `truenas-proxmox` + transitional package |
+| [#263](https://github.com/TheGrandWazoo/freenas-proxmox/issues/263) | Fix `truenas_target` full-IQN match |
+| [#260](https://github.com/TheGrandWazoo/freenas-proxmox/issues/260) | TPM state disk limitation callout |
+| [#250](https://github.com/TheGrandWazoo/freenas-proxmox/issues/250) | Rollback orphaned TrueNAS resources on `alloc_image` partial failure |
+| [#228](https://github.com/TheGrandWazoo/freenas-proxmox/issues/228) | Migration docs: beginner, advanced, troubleshooting |
 
-### Lab upgrade plan (required to test #266)
+---
 
-| Node | Current | Target | Notes |
-|------|---------|--------|-------|
-| pve01-hq | PVE 8.4.19 | PVE 9.x | Blocked: Ceph Quincy → Reef first; systemd-boot pkg remove |
-| pve02-hq | PVE 8.4.14 | PVE 9.x (possible) | TBD |
-| pve03-hq | PVE 8.3.2 | Stay 8.4 | Regression baseline |
-| pve04-hq | PVE 8.3.2 | Stay 8.4 | Regression baseline |
+## Released — GitHub Pages APT Repository
 
-Ceph upgrade (Quincy → Reef) must complete across all 4 nodes before pve01 OS upgrade.
+**Completed:** 2026-06-06  
+**Closed:** [#230](https://github.com/TheGrandWazoo/freenas-proxmox/issues/230)  
+**URL:** https://thegrandwazoo.github.io/freenas-proxmox
 
-### Completed in v3.0.0
+Replaced Cloudsmith as the primary package distribution channel. Per-major-version dist tracks prevent silent cross-version upgrades (ADR-010). Optional feature packages distributed via apt components (ADR-011).
 
-| # | Title | Commit |
-|---|-------|--------|
-| [#266](https://github.com/TheGrandWazoo/freenas-proxmox/issues/266) | PVE 9: VM fails to start — `lun` string vs integer in QEMU blockdev JSON | pending commit |
-| [#269](https://github.com/TheGrandWazoo/freenas-proxmox/issues/269) | SCALE 25.10 strict Pydantic rejects volsize as string | `c7ce39d` |
-| [#267](https://github.com/TheGrandWazoo/freenas-proxmox/issues/267) | free_image 422 on targetextent delete when VM is running | `359c2af` |
-| [#265](https://github.com/TheGrandWazoo/freenas-proxmox/issues/265) | Loop over all targetextent rows in free_image | `0dea6bc` |
-| [#264](https://github.com/TheGrandWazoo/freenas-proxmox/issues/264) | SCALE 25.04 compatibility: integer type coercion + alias uniqueness | `96957c0` |
-| [#261](https://github.com/TheGrandWazoo/freenas-proxmox/issues/261) | API token keyfile (`/etc/pve/priv/truenas-<id>.key`) | `f30862f` |
-| [#262](https://github.com/TheGrandWazoo/freenas-proxmox/issues/262) | Package rename: `freenas-proxmox` → `truenas-proxmox` (transitional package ships) | `9b2ecb8` |
-| [#263](https://github.com/TheGrandWazoo/freenas-proxmox/issues/263) | Fix `truenas_target` full-IQN match | `3a8a5df` |
-| [#260](https://github.com/TheGrandWazoo/freenas-proxmox/issues/260) | TPM state disk limitation callout in README | `0a8e7e7` |
-| [#250](https://github.com/TheGrandWazoo/freenas-proxmox/issues/250) | Rollback orphaned TrueNAS resources on `alloc_image` partial failure | `eab964c` |
-| [#228](https://github.com/TheGrandWazoo/freenas-proxmox/issues/228) | Migration path v2.x→v3.x docs (beginner, advanced, troubleshooting) | `0a17a30` |
-| [#252](https://github.com/TheGrandWazoo/freenas-proxmox/issues/252) | Integration test 2.x→3.0 upgrade path | closed |
+### Dist tracks
+
+| Dist | Content | Sources.list |
+|------|---------|--------------|
+| `main` | v2.x — backward-compat alias | `... freenas-proxmox main main` |
+| `v2` | v2.x — explicit pin | `... freenas-proxmox v2 main` |
+| `v3` | v3.x | `... freenas-proxmox v3 main` |
+| `testing` | beta builds | Future — [#272](https://github.com/TheGrandWazoo/freenas-proxmox/issues/272) |
+
+### Components (ADR-011)
+
+| Component | Content |
+|-----------|---------|
+| `main` | Base plugin (all installs) |
+| `multipath` | `truenas-proxmox-multipath` — future opt-in, [#256](https://github.com/TheGrandWazoo/freenas-proxmox/issues/256) |
+
+### Cloudsmith transition state (2026-06-06)
+
+| Channel | State |
+|---------|-------|
+| Stable (`truenas-proxmox`) | v3.x+ no longer published here; v2.x still published |
+| Testing (`truenas-proxmox-testing`) | Still active until #272 ships |
+
+### Migration tooling
+
+`scripts/migrate-repo-to-github-pages.sh` — auto-detects installed version, finds Cloudsmith sources by URL content, switches to correct dist track. Run on each Proxmox node as root.
 
 ---
 
@@ -60,51 +81,52 @@ Ceph upgrade (Quincy → Reef) must complete across all 4 nodes before pve01 OS 
 
 **Status:** Deferred — no timeline set  
 **Decision date:** 2026-05-25  
-**Tracked in:** [#262](https://github.com/TheGrandWazoo/freenas-proxmox/issues/262) (comment)
+**Tracked in:** [#229](https://github.com/TheGrandWazoo/freenas-proxmox/issues/229)
 
-All code is ready: the `truenas-proxmox` package is built and published; the transitional `freenas-proxmox` package is in place. GitHub URLs in docs are already updated to the new name.
-
-The actual `gh repo rename` on GitHub has been deliberately held. This is a business-timing decision — GitHub redirects old URLs automatically so there is no technical urgency. The rename can be done at any time by running:
+All code is ready. GitHub auto-redirects old URLs so there is no technical urgency.
 
 ```bash
 gh repo rename truenas-proxmox --repo TheGrandWazoo/freenas-proxmox
 ```
 
-**Note:** `FUNDING.yml` contains only `github: TheGrandWazoo` (tied to the user account, not the repo). The rename has **no effect** on GitHub Sponsors.
+**Note:** `FUNDING.yml` is tied to the user account, not the repo name. Rename has no effect on GitHub Sponsors.
 
 ---
 
-## Upcoming — v3.1.0 (PVE 9 only + Snapshots)
+## Upcoming — v3.1.0 (PVE 9 + Snapshots)
 
 **Target:** Before PVE 8 EOL — 2026-08-31  
 **PVE support:** PVE 9.x only — PVE 8 support dropped  
-**Decision date:** 2026-05-31 — see ADR-009
+**Decision date:** 2026-05-31 — see ADR-009  
+**Milestone:** [v3.1.0 — PVE 9 + Snapshots](https://github.com/TheGrandWazoo/freenas-proxmox/milestone/4)
 
 v3.1 is the first release that requires PVE 9. Dropping PVE 8 allows:
-- Bumping `api()` to match PVE 9's `APIVER` (silences "older storage API" warning — see [#270](https://github.com/TheGrandWazoo/freenas-proxmox/issues/270))
+- Bumping `api()` to PVE 9's `APIVER` (silences "older storage API" warning)
 - Implementing snapshot-as-volume-chains (PVE 9 feature)
 - Removing the `qemu_blockdev_options` override if Proxmox fixes `Plugin.pm` upstream
 
-| # | Title |
-|---|-------|
-| [#234](https://github.com/TheGrandWazoo/freenas-proxmox/issues/234) | Snapshot interface (Snapshot-as-Volume-Chains, PVE 9.0+) |
-| [#270](https://github.com/TheGrandWazoo/freenas-proxmox/issues/270) | Bump `api()` to PVE 9 APIVER — requires dropping PVE 8 |
-| [#249](https://github.com/TheGrandWazoo/freenas-proxmox/issues/249) | Per-variant dispatch (TrueNAS-Core.pm / TrueNAS-Scale.pm) — evaluate |
-| [#256](https://github.com/TheGrandWazoo/freenas-proxmox/issues/256) | Multipath support |
+| # | Title | Notes |
+|---|-------|-------|
+| [#234](https://github.com/TheGrandWazoo/freenas-proxmox/issues/234) | Snapshot interface (Snapshot-as-Volume-Chains) | Required |
+| [#270](https://github.com/TheGrandWazoo/freenas-proxmox/issues/270) | Bump `api()` to PVE 9 APIVER | Required |
+| [#272](https://github.com/TheGrandWazoo/freenas-proxmox/issues/272) | GitHub Pages testing dist track (replace Cloudsmith testing) | Required |
+| [#256](https://github.com/TheGrandWazoo/freenas-proxmox/issues/256) | Multipath — separate `truenas-proxmox-multipath` plugin (ADR-011) | Blocked on hardware |
+| [#249](https://github.com/TheGrandWazoo/freenas-proxmox/issues/249) | Per-variant dispatch (TrueNAS-Core.pm / TrueNAS-Scale.pm) | Evaluate |
+
+### Multipath design decision (2026-06-06)
+
+Multipath ships as a **separate plugin** (`TrueNASMultipath.pm`) in a separate package (`truenas-proxmox-multipath`), distributed via the `multipath` apt component — not as a boolean option in the base plugin. See ADR-011 and [#256](https://github.com/TheGrandWazoo/freenas-proxmox/issues/256).
 
 ---
 
 ## Upcoming — v4.0.0 (WebSocket API, SCALE 25.x)
 
-**Target:** After PoC testing on SCALE 25.04 Fangtooth and 25.10 Goldeye  
-**Scope:** TBD pending PoC results  
-**Why major version:** WebSocket JSON-RPC 2.0 is a new transport layer — a genuine architectural change, not a support boundary adjustment.
+**Target:** After PoC testing on SCALE 25.04+  
+**Why major version:** WebSocket JSON-RPC 2.0 is a new transport — genuine architectural change.
 
 | # | Title |
 |---|-------|
 | [#243](https://github.com/TheGrandWazoo/freenas-proxmox/issues/243) | WebSocket JSON-RPC 2.0 API support (TrueNAS SCALE 25.04+) |
-
-**Lab note:** A TrueNAS SCALE 25.04 node is available for PoC testing (stood up 2026-05-25, minimal config).
 
 ---
 
