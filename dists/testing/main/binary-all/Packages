@@ -1,0 +1,46 @@
+Package: freenas-proxmox
+Version: 3.1.0~beta+58a648e
+Architecture: all
+Maintainer: KSA Technologies, LLC <theprofessor@ksatechnologies.com>
+Depends: truenas-proxmox (>= 3.0.0)
+Filename: pool/testing/freenas-proxmox_3.1.0~beta+58a648e_all.deb
+Size: 1604
+MD5sum: 82377292730ecf9034f882d2574d3357
+SHA1: 0d0e33bc00fb9588b6ad347669831c6219e424ba
+SHA256: 396b710a69cf70d84757d5f8ca404c4890882404f5710badb606ec347d923f1e
+Section: perl
+Priority: optional
+Homepage: https://github.com/TheGrandWazoo/truenas-proxmox
+Description: Transitional package — replaced by truenas-proxmox
+ This is an empty transitional package. The plugin has been renamed from
+ freenas-proxmox to truenas-proxmox. Installing this package pulls in the
+ real package automatically.
+ .
+ To fully complete migration: apt install truenas-proxmox && apt purge freenas-proxmox
+ .
+ The freenas-proxmox package name will not exist in v4.0.
+
+Package: truenas-proxmox
+Version: 3.1.0~beta+58a648e
+Architecture: all
+Maintainer: KSA Technologies, LLC <theprofessor@ksatechnologies.com>
+Depends: librest-client-perl, open-iscsi
+Breaks: freenas-proxmox (<< 3.0.0)
+Replaces: freenas-proxmox
+Filename: pool/testing/truenas-proxmox_3.1.0~beta+58a648e_all.deb
+Size: 14958
+MD5sum: 4b2cceff4614b1e372a20ef4345f10a4
+SHA1: 9a2b321288d9eadefd951da60417b218752a12a0
+SHA256: 938f0b2738808d4b3ddd868fb51b674a9a5b1a111bde51e8727df75676d31ba4
+Section: perl
+Priority: optional
+Homepage: https://github.com/TheGrandWazoo/truenas-proxmox
+Description: TrueNAS Custom Storage Plugin for Proxmox VE
+ Native PVE::Storage::Custom plugin for managing TrueNAS ZFS volumes over iSCSI.
+ Discovered automatically by Proxmox VE — no patches to PVE system files required.
+ Supports TrueNAS CORE and SCALE via the TrueNAS REST API with Bearer Token auth.
+ No SSH keys required.
+ .
+ Licensed under the GNU Affero General Public License v3 (AGPL-3.0).
+ Copyright (c) 2020 KSA Technologies, LLC.
+
