@@ -105,10 +105,31 @@ v3.1 is the first release that requires PVE 9. Dropping PVE 8 allows:
 - Implementing snapshot-as-volume-chains (PVE 9 feature)
 - Removing the `qemu_blockdev_options` override if Proxmox fixes `Plugin.pm` upstream
 
+### Completed in v3.1.0 (in progress)
+
+| # | Title | Commit |
+|---|-------|--------|
+| [#270](https://github.com/TheGrandWazoo/freenas-proxmox/issues/270) | Bump `api()` to 14 — silences PVE 9 "older storage API" warning | fc74a42 |
+| [#272](https://github.com/TheGrandWazoo/freenas-proxmox/issues/272) | GitHub Pages testing dist track (retires Cloudsmith testing) | 03fe20b |
+| [#273](https://github.com/TheGrandWazoo/freenas-proxmox/issues/273) | Debian changelog in package (`apt changelog` was failing) | 1c98591 |
+| [#274](https://github.com/TheGrandWazoo/freenas-proxmox/issues/274) | Filename: prefix stripped from Packages — packages not downloadable | 19a3ec2 |
+| [#275](https://github.com/TheGrandWazoo/freenas-proxmox/issues/275) | README badges pointed to non-existent repo | da0aaff |
+| [#276](https://github.com/TheGrandWazoo/freenas-proxmox/issues/276) | parse_volname state volume crash — RAM snapshots left orphans | 80a7889 |
+| [#234](https://github.com/TheGrandWazoo/freenas-proxmox/issues/234) | Snapshot interface — ZFS snapshots via TrueNAS REST API | 59d8a81 |
+
+**Snapshot implementation (2026-06-07):** Verified on PVE 9.2.3 against TrueNAS CORE 13.0-U6 and SCALE 24.10. Disk-only and RAM snapshots both confirmed working end-to-end including rollback.
+
+### Open in v3.1.0
+
 | # | Title | Notes |
 |---|-------|-------|
-| [#234](https://github.com/TheGrandWazoo/freenas-proxmox/issues/234) | Snapshot interface (Snapshot-as-Volume-Chains) | Required |
-| [#270](https://github.com/TheGrandWazoo/freenas-proxmox/issues/270) | Bump `api()` to PVE 9 APIVER | Required |
+| [#277](https://github.com/TheGrandWazoo/freenas-proxmox/issues/277) | iSCSI GET_LBA_STATUS error on VM start | Log noise, non-fatal |
+| [#256](https://github.com/TheGrandWazoo/freenas-proxmox/issues/256) | Multipath — separate plugin (ADR-011) | Hardware-blocked |
+
+| # | Title | Notes |
+|---|-------|-------|
+| [#234](https://github.com/TheGrandWazoo/freenas-proxmox/issues/234) | Snapshot interface (Snapshot-as-Volume-Chains) | ✅ Done |
+| [#270](https://github.com/TheGrandWazoo/freenas-proxmox/issues/270) | Bump `api()` to PVE 9 APIVER | ✅ Done |
 | [#272](https://github.com/TheGrandWazoo/freenas-proxmox/issues/272) | GitHub Pages testing dist track (replace Cloudsmith testing) | Required |
 | [#256](https://github.com/TheGrandWazoo/freenas-proxmox/issues/256) | Multipath — separate `truenas-proxmox-multipath` plugin (ADR-011) | Blocked on hardware |
 | [#249](https://github.com/TheGrandWazoo/freenas-proxmox/issues/249) | Per-variant dispatch (TrueNAS-Core.pm / TrueNAS-Scale.pm) | Evaluate |
