@@ -415,6 +415,12 @@ sub parse_volname {
         return ('images', $volname, $vmid, undef, undef, $isBase, 'raw');
     }
 
+    # RAM snapshot state volume: vm-<vmid>-state-<snapname>
+    # PVE allocates one of these per snapshot when "Include RAM" is selected.
+    if ($volname =~ /^vm-(\d+)-state-.+$/) {
+        return ('images', $volname, $1, undef, undef, 0, 'raw');
+    }
+
     die "unable to parse TrueNAS volume name '$volname'\n";
 }
 
