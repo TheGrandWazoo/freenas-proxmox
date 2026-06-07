@@ -1,0 +1,58 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Architectures: all amd64 arm64
+Codename: testing
+Components: main
+Date: Sun, 07 Jun 2026 12:44:24 +0000
+Label: truenas-proxmox
+Origin: truenas-proxmox
+Suite: testing
+MD5Sum:
+ c6be8e9f623f69ab6dea59b8795ac682              166 Release
+ d41d8cd98f00b204e9800998ecf8427e                0 main/binary-all/Packages
+ 33eba85ad025caa4bffe386494bc52e8               29 main/binary-all/Packages.gz
+ d41d8cd98f00b204e9800998ecf8427e                0 main/binary-amd64/Packages
+ 33eba85ad025caa4bffe386494bc52e8               29 main/binary-amd64/Packages.gz
+ d41d8cd98f00b204e9800998ecf8427e                0 main/binary-arm64/Packages
+ 33eba85ad025caa4bffe386494bc52e8               29 main/binary-arm64/Packages.gz
+SHA1:
+ b28a4ceb81bfeb93df1cb711a1843172e061a008              166 Release
+ da39a3ee5e6b4b0d3255bfef95601890afd80709                0 main/binary-all/Packages
+ 3dd90f79ca01301be8a7a65b4c58241159dd3da4               29 main/binary-all/Packages.gz
+ da39a3ee5e6b4b0d3255bfef95601890afd80709                0 main/binary-amd64/Packages
+ 3dd90f79ca01301be8a7a65b4c58241159dd3da4               29 main/binary-amd64/Packages.gz
+ da39a3ee5e6b4b0d3255bfef95601890afd80709                0 main/binary-arm64/Packages
+ 3dd90f79ca01301be8a7a65b4c58241159dd3da4               29 main/binary-arm64/Packages.gz
+SHA256:
+ 22e7800b771bc99abb09bab15ce6534194f87f6e60cab445e759e41aa699dc32              166 Release
+ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 main/binary-all/Packages
+ daaf706362ebd8783b608f5a77c0e42f2e927e4914a220f0f82d8b689f2a3235               29 main/binary-all/Packages.gz
+ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 main/binary-amd64/Packages
+ daaf706362ebd8783b608f5a77c0e42f2e927e4914a220f0f82d8b689f2a3235               29 main/binary-amd64/Packages.gz
+ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 main/binary-arm64/Packages
+ daaf706362ebd8783b608f5a77c0e42f2e927e4914a220f0f82d8b689f2a3235               29 main/binary-arm64/Packages.gz
+SHA512:
+ 98e2fdf7af3dfef34753e70f32761324ee4caadf498a9ccf542bc040af4c370c06a7d9a0da966e8224f8f538db045d66f844d276c641dc22b2a5c0e187890c88              166 Release
+ cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e                0 main/binary-all/Packages
+ ad6de6a3eb1e15b8bd53e9f631817876ebff316f57579743500e1e14f0cbc9e7ab472b49208f5c93b6af26a317235c7ef4b3f17b2da0f7874245a25daabb706b               29 main/binary-all/Packages.gz
+ cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e                0 main/binary-amd64/Packages
+ ad6de6a3eb1e15b8bd53e9f631817876ebff316f57579743500e1e14f0cbc9e7ab472b49208f5c93b6af26a317235c7ef4b3f17b2da0f7874245a25daabb706b               29 main/binary-amd64/Packages.gz
+ cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e                0 main/binary-arm64/Packages
+ ad6de6a3eb1e15b8bd53e9f631817876ebff316f57579743500e1e14f0cbc9e7ab472b49208f5c93b6af26a317235c7ef4b3f17b2da0f7874245a25daabb706b               29 main/binary-arm64/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEEB5yWPw3rhXMeE7xxiWsCIO3Yy24FAmolZ6gACgkQiWsCIO3Y
+y24YABAAleZTivcP8zDxuwDGhEW9DuXyxpkBdFYhhPsWXzOpTGyMwQud8eHnySQM
+56NDx4mB4N5sMVua55mSYRdlo+p/9JubG15h39ZtafALQ5Bnhx1uj/k0SLdCGHVJ
+Qm8M3B4F56mYom04R1Skbh1yeIKg+rNT8AMlwzWI+ToH+dg9p9CFqYE39WYVVcf3
+GNffaKoPShh1LC6knyHlCYTaXfIiHFMT81/MCQwdGnkfKwKCVpXm/JZRUrnW5pW6
+dAjV8Zw9yx11LiZs+lOtIGlsalr36bnhzTO3cCvRJqce2MZfGiJrD2Uru0eyWrYm
+S7ZRKyWrH27sGBLrtcVbfKQhC+dZNdPAr3rvGwLpB6lKFkFmRznUaJWnfFcp/XP9
+ixAdUPNRDAvx/mHdvX+FPB0vz7DNz0JSsLOC3WNsrBFlTpZbAXNZo/IDjyQtBtRi
+Ru9XL5FoR+LqFcmL9pT2VZbGzzZeXFkL6eeVMcuzFRCylH9I6XjwT6sJKdytA3HB
+dCDrmE4LzpmmSzv7gZ5zgxucR+vm7nWK0VBYYhbN0eHydxoj4ir9diH4TMIAphmJ
+Q6lFmZAHthH2gofSayYeaM5rKSC8bFGydAzN55q3OxGWgihoTNXNVUVpqPZ+i4Kx
+Ysw87hF7Nj30ENzh0Lk7Z6iGJvVaQ4QiN85ToPsNIpqPJS0APCk=
+=6RPD
+-----END PGP SIGNATURE-----
