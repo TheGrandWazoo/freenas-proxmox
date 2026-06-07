@@ -726,7 +726,7 @@ sub volume_snapshot {
     my $dataset = _snap_dataset($scfg, $volname);
     _log('info', "snapshot: creating $dataset\@$snap");
     _api($scfg, 'POST', '/zfs/snapshot', { dataset => $dataset, name => $snap });
-    return undef;
+    return;
 }
 
 sub volume_snapshot_delete {
@@ -739,7 +739,7 @@ sub volume_snapshot_delete {
     # The snapshot API requires full URI encoding of the id path segment —
     # unlike the dataset endpoint, it does not accept bare slashes in the path.
     _api($scfg, 'DELETE', "/zfs/snapshot/id/" . uri_escape($id));
-    return undef;
+    return;
 }
 
 sub volume_snapshot_rollback {
@@ -752,7 +752,7 @@ sub volume_snapshot_rollback {
         id      => $id,
         options => { force => JSON::false, recursive_clones => JSON::false },
     });
-    return undef;
+    return;
 }
 
 # ZFS only permits rollback to the most recent snapshot. If $snap is not the
