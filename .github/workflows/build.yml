@@ -269,6 +269,8 @@ jobs:
     needs: [build, security]
     # Only publish on direct pushes (not PRs) to tracked branches or tags
     if: github.event_name == 'push' && needs.build.outputs.channel != 'none'
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4.3.1
@@ -315,7 +317,7 @@ jobs:
         env:
           APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
           APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}
-          GH_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Abort clearly if signing key not configured
           if [[ -z "$APT_SIGNING_KEY" ]]; then
@@ -410,7 +412,7 @@ jobs:
         env:
           APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
           APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}
-          GH_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [[ -z "$APT_SIGNING_KEY" ]]; then
             echo "::error::APT_SIGNING_KEY secret is not set"
