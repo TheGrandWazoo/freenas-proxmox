@@ -690,7 +690,7 @@ sub volume_has_feature {
 
     my $features = {
         copy     => { base => 1, current => 1 },
-        snapshot => { current => 1 },
+        snapshot => { current => 1, snap => 1 },
     };
 
     my ($vtype, undef, undef, undef, undef, $isBase) = $class->parse_volname($volname);
@@ -698,6 +698,109 @@ sub volume_has_feature {
 
     return 1 if $features->{$feature} && $features->{$feature}{$key};
     return;
+}
+
+# ── Snapshot support ──────────────────────────────────────────────────────────
+
+# Request a guest filesystem freeze before snapping a running VM's disk.
+# Returning 1 causes PVE to ask the QEMU guest agent to freeze IO before the
+# TrueNAS API snapshot call, ensuring write-consistency.
+sub volume_snapshot_needs_fsfreeze { return 1; }
+
+# Returns the full ZFS path for a volume: "pool[/dataset]/volname"
+sub _snap_dataset {
+    my ($scfg, $volname) = @_;
+    return _zvol_prefix($scfg) . "/$volname";
+}
+
+# Returns the full ZFS snapshot ID: "pool[/dataset]/volname@snapname"
+sub _snap_id {
+    my ($scfg, $volname, $snap) = @_;
+    return _zvol_prefix($scfg) . "/$volname\@$snap";
+}
+
+sub volume_snapshot {
+    my ($class, $scfg, $storeid, $volname, $snap) = @_;
+
+    _resolve_token($storeid, $scfg);
+    my $dataset = _snap_dataset($scfg, $volname);
+    _log('info', "snapshot: creating $dataset\@$snap");
+    _api($scfg, 'POST', '/zfs/snapshot', { dataset => $dataset, name => $snap });
+    return undef;
+}
+
+sub volume_snapshot_delete {
+    my ($class, $scfg, $storeid, $volname, $snap, $running) = @_;
+
+    _resolve_token($storeid, $scfg);
+    my $id = _snap_id($scfg, $volname, $snap);
+    _log('info', "snapshot: deleting $id");
+
+    # The snapshot API requires full URI encoding of the id path segment —
+    # unlike the dataset endpoint, it does not accept bare slashes in the path.
+    _api($scfg, 'DELETE', "/zfs/snapshot/id/" . uri_escape($id));
+    return undef;
+}
+
+sub volume_snapshot_rollback {
+    my ($class, $scfg, $storeid, $volname, $snap) = @_;
+
+    _resolve_token($storeid, $scfg);
+    my $id = _snap_id($scfg, $volname, $snap);
+    _log('info', "snapshot: rolling back to $id");
+    _api($scfg, 'POST', '/zfs/snapshot/rollback', {
+        id      => $id,
+        options => { force => JSON::false, recursive_clones => JSON::false },
+    });
+    return undef;
+}
+
+# ZFS only permits rollback to the most recent snapshot. If $snap is not the
+# newest, list the blocking (newer) snapshots so PVE can report them.
+sub volume_rollback_is_possible {
+    my ($class, $scfg, $storeid, $volname, $snap, $blockers) = @_;
+
+    my $snaps = $class->volume_snapshot_info($scfg, $storeid, $volname);
+    $blockers //= [];
+    my $found;
+
+    for my $name (sort { $snaps->{$a}{creation_time} <=> $snaps->{$b}{creation_time} }
+                  keys %$snaps) {
+        if ($name eq $snap) {
+            $found = 1;
+        } elsif ($found) {
+            push @$blockers, $name;
+        }
+    }
+
+    die "snapshot '$snap' does not exist on '$volname'\n" if !$found;
+    die "can't rollback '$snap' on '$volname' — newer snapshots exist: "
+        . join(', ', @$blockers) . "\n"
+        if @$blockers;
+
+    return 1;
+}
+
+# Returns a hashref of snapshots for $volname, keyed by snapshot name:
+#   { 'snapname' => { id => 'pool/vol@snapname', creation_time => $epoch }, ... }
+sub volume_snapshot_info {
+    my ($class, $scfg, $storeid, $volname) = @_;
+
+    _resolve_token($storeid, $scfg);
+    my $dataset = _snap_dataset($scfg, $volname);
+    my $enc_ds  = uri_escape($dataset);
+    my $snaps   = _api($scfg, 'GET', "/zfs/snapshot?dataset=$enc_ds&limit=500") // [];
+
+    my %result;
+    for my $s (@$snaps) {
+        # snapshot_name is the part after @; id is the full "dataset@name" string
+        my $name  = $s->{snapshot_name}
+            // do { (my $n = $s->{id} // '') =~ s/^.*@//; $n };
+        my $ctime = $s->{properties}{creation}{rawvalue} // 0;
+        $result{$name} = { id => $s->{id}, creation_time => int($ctime) };
+    }
+
+    return \%result;
 }
 
 1;
