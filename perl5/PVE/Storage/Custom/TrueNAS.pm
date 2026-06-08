@@ -389,6 +389,7 @@ sub _find_extent {
 
     return {
         extent_id       => $ext->{id},
+        naa             => $ext->{naa},
         targetextents   => $tes,
         targetextent_id => defined $te ? $te->{id}     : undef,
         lun_id          => defined $te ? $te->{lunid}  : 0,

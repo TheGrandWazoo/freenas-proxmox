@@ -151,13 +151,24 @@ sub activate_volume {
         }
     }
 
-    # Tell multipathd to rescan now
-    system('multipathd', 'reconfigure') if -x '/usr/sbin/multipathd';
-    system('multipath') if !-b $mapper;
+    # Signal multipathd to pick up the new sessions. Don't call multipath(8)
+    # directly — that conflicts with a running multipathd daemon.
+    if (-x '/usr/sbin/multipathd') {
+        system('multipathd', 'reconfigure');
+    } elsif (-x '/sbin/multipathd') {
+        system('/sbin/multipathd', 'reconfigure');
+    }
 
+    # multipathd may take a moment to create the dm device after sessions appear
     unless (_wait_for_device($mapper, 30)) {
-        die "Multipath device $mapper did not appear after 30s. "
-          . "Check that multipathd is running and multipath.conf includes TrueNAS devices.\n";
+        # Last resort: force a manual scan
+        system('multipath', '-v0') if !-b $mapper;
+        unless (_wait_for_device($mapper, 10)) {
+            my $found = `multipath -l 2>/dev/null` // '';
+            die "Multipath device $mapper did not appear after 40s. "
+              . "Check that multipathd is running and multipath.conf includes TrueNAS devices.\n"
+              . "Current multipath map:\n$found\n";
+        }
     }
 
     PVE::Storage::Custom::TrueNAS::_log('info', "multipath activate: $mapper ready");
