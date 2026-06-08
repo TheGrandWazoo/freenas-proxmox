@@ -1,0 +1,56 @@
+#!/bin/bash
+# postinst: truenas-proxmox-multipath install/upgrade script
+set -e
+
+INSTALL_DIR="/usr/share/truenas-proxmox-multipath"
+PLUGIN_DST="/usr/share/perl5/PVE/Storage/Custom/TrueNASMultipath.pm"
+MULTIPATH_CONF="/etc/multipath.conf"
+LOG_FILE="/var/log/truenas-proxmox-install.log"
+
+log() {
+    echo "[truenas-proxmox-multipath] $*" | tee -a "$LOG_FILE"
+}
+
+install_plugin() {
+    log "Installing ${PLUGIN_DST}"
+    mkdir -p "$(dirname "$PLUGIN_DST")"
+    cp "${INSTALL_DIR}/TrueNASMultipath.pm" "$PLUGIN_DST"
+}
+
+install_multipath_conf() {
+    if [ -f "$MULTIPATH_CONF" ]; then
+        log "${MULTIPATH_CONF} already exists — not overwriting"
+        log "Ensure it contains a 'devices' section for TrueNAS iSCSI Disk"
+        log "See ${INSTALL_DIR}/multipath.conf.example for reference"
+        return 0
+    fi
+    log "Installing ${MULTIPATH_CONF}"
+    cp "${INSTALL_DIR}/multipath.conf.example" "$MULTIPATH_CONF"
+    systemctl enable multipathd 2>/dev/null || true
+    systemctl start multipathd  2>/dev/null || true
+    log "multipathd enabled and started"
+}
+
+restart_pve_services() {
+    log "Restarting Proxmox VE services ..."
+    pvedaemon restart && log "pvedaemon restarted"
+    pveproxy restart  && log "pveproxy restarted"
+    log "Done. Refresh your Proxmox browser tab."
+}
+
+case "$1" in
+    configure)
+        log "Configuring truenas-proxmox-multipath (previous version: ${2:-none})"
+        install_plugin
+        install_multipath_conf
+        restart_pve_services
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        echo "$0: called with unknown argument '$1'" >&2
+        exit 0
+        ;;
+esac
+
+exit 0

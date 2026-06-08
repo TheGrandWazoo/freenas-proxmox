@@ -1,0 +1,20 @@
+# /etc/multipath.conf — installed by truenas-proxmox-multipath
+# This file is only created if /etc/multipath.conf does not already exist.
+# If you have an existing multipath.conf, merge the 'devices' section below
+# into it manually.
+
+defaults {
+    find_multipaths  yes
+}
+
+devices {
+    device {
+        vendor                "TrueNAS"
+        product               "iSCSI Disk"
+        path_grouping_policy  multibus
+        path_checker          tur
+        failback              immediate
+        rr_weight             uniform
+        no_path_retry         5
+    }
+}

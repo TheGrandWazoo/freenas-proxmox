@@ -1,0 +1,32 @@
+#!/bin/bash
+# postrm: truenas-proxmox-multipath remove/purge script
+set -e
+
+PLUGIN_DST="/usr/share/perl5/PVE/Storage/Custom/TrueNASMultipath.pm"
+LOG_FILE="/var/log/truenas-proxmox-install.log"
+
+log() {
+    echo "[truenas-proxmox-multipath] $*" | tee -a "$LOG_FILE"
+}
+
+case "$1" in
+    remove|purge)
+        if [ -f "$PLUGIN_DST" ]; then
+            log "Removing ${PLUGIN_DST}"
+            rm -f "$PLUGIN_DST"
+        fi
+
+        log "Restarting Proxmox VE services ..."
+        pvedaemon restart 2>/dev/null && log "pvedaemon restarted" || true
+        pveproxy restart  2>/dev/null && log "pveproxy restarted"  || true
+        log "Done."
+        ;;
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        ;;
+    *)
+        echo "$0: called with unknown argument '$1'" >&2
+        exit 0
+        ;;
+esac
+
+exit 0

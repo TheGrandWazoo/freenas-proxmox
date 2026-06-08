@@ -46,12 +46,16 @@ jobs:
           echo "==> Checking Perl syntax..."
           perl -c -I/tmp/pve-stub perl5/PVE/Storage/Custom/TrueNAS.pm \
             && echo "TrueNAS.pm: OK"
+          perl -c -I/tmp/pve-stub -I/tmp/pve-stub/.. \
+            perl5/PVE/Storage/Custom/TrueNASMultipath.pm \
+            && echo "TrueNASMultipath.pm: OK"
 
       - name: Perl static analysis (perlcritic)
         run: |
           echo "==> Running perlcritic..."
           perlcritic --profile .perlcriticrc \
-            perl5/PVE/Storage/Custom/TrueNAS.pm
+            perl5/PVE/Storage/Custom/TrueNAS.pm \
+            perl5/PVE/Storage/Custom/TrueNASMultipath.pm
 
       - name: Shell script lint (shellcheck)
         run: |
@@ -59,7 +63,9 @@ jobs:
           shellcheck --severity=warning \
             packaging/DEBIAN/postinst \
             packaging/DEBIAN/postrm \
-            packaging/DEBIAN-transitional/postinst
+            packaging/DEBIAN-transitional/postinst \
+            packaging/DEBIAN-multipath/postinst \
+            packaging/DEBIAN-multipath/postrm
           echo "Shell scripts OK"
 
   # ── Job 2: Build .deb ────────────────────────────────────────────────────────
@@ -72,6 +78,7 @@ jobs:
       version:              ${{ steps.vars.outputs.version }}
       deb_file:             ${{ steps.vars.outputs.deb_file }}
       transitional_deb_file: ${{ steps.vars.outputs.transitional_deb_file }}
+      multipath_deb_file:   ${{ steps.vars.outputs.multipath_deb_file }}
       channel:              ${{ steps.vars.outputs.channel }}
       cloudsmith_repo:      ${{ steps.vars.outputs.cloudsmith_repo }}
       is_release:           ${{ steps.vars.outputs.is_release }}
@@ -129,10 +136,12 @@ jobs:
 
           DEB_FILE="${PACKAGE_NAME}_${VERSION}_all.deb"
           TRANSITIONAL_DEB_FILE="${TRANSITIONAL_PACKAGE_NAME}_${VERSION}_all.deb"
+          MULTIPATH_DEB_FILE="truenas-proxmox-multipath_${VERSION}_all.deb"
 
           echo "version=${VERSION}"                                   >> "$GITHUB_OUTPUT"
           echo "deb_file=${DEB_FILE}"                                 >> "$GITHUB_OUTPUT"
           echo "transitional_deb_file=${TRANSITIONAL_DEB_FILE}"       >> "$GITHUB_OUTPUT"
+          echo "multipath_deb_file=${MULTIPATH_DEB_FILE}"             >> "$GITHUB_OUTPUT"
           echo "channel=${CHANNEL}"                                   >> "$GITHUB_OUTPUT"
           echo "cloudsmith_repo=${CLOUDSMITH_REPO}"                   >> "$GITHUB_OUTPUT"
           echo "is_release=${IS_RELEASE}"                             >> "$GITHUB_OUTPUT"
@@ -198,21 +207,49 @@ jobs:
           echo "==> Transitional package contents:"
           find "${STAGING}" | sort
 
+      - name: Assemble multipath package staging directory
+        run: |
+          VERSION="${{ steps.vars.outputs.version }}"
+          STAGING="dist-multipath"
+
+          mkdir -p "${STAGING}/DEBIAN"
+          mkdir -p "${STAGING}/usr/share/truenas-proxmox-multipath"
+
+          sed "s/\${VERSION}/${VERSION}/" packaging/DEBIAN-multipath/control.j2 \
+            > "${STAGING}/DEBIAN/control"
+
+          cp packaging/DEBIAN-multipath/postinst "${STAGING}/DEBIAN/postinst"
+          cp packaging/DEBIAN-multipath/postrm   "${STAGING}/DEBIAN/postrm"
+          chmod 0755 "${STAGING}/DEBIAN/postinst" "${STAGING}/DEBIAN/postrm"
+
+          cp perl5/PVE/Storage/Custom/TrueNASMultipath.pm \
+            "${STAGING}/usr/share/truenas-proxmox-multipath/TrueNASMultipath.pm"
+          cp packaging/DEBIAN-multipath/multipath.conf.example \
+            "${STAGING}/usr/share/truenas-proxmox-multipath/multipath.conf.example"
+
+          mkdir -p "${STAGING}/usr/share/doc/truenas-proxmox-multipath"
+          gzip -9c packaging/DEBIAN-multipath/changelog.Debian \
+            > "${STAGING}/usr/share/doc/truenas-proxmox-multipath/changelog.Debian.gz"
+
+          echo "==> Multipath package contents:"
+          find "${STAGING}" | sort
+
       - name: Build .deb packages
         run: |
           sudo dpkg-deb -Zgzip --build dist             "${{ steps.vars.outputs.deb_file }}"
           sudo dpkg-deb -Zgzip --build dist-transitional "${{ steps.vars.outputs.transitional_deb_file }}"
+          sudo dpkg-deb -Zgzip --build dist-multipath    "${{ steps.vars.outputs.multipath_deb_file }}"
 
       - name: Verify .deb packages
         run: |
           echo "==> Package info (truenas-proxmox):"
           dpkg-deb --info "${{ steps.vars.outputs.deb_file }}"
           echo ""
-          echo "==> Package contents (truenas-proxmox):"
-          dpkg-deb --contents "${{ steps.vars.outputs.deb_file }}"
-          echo ""
           echo "==> Package info (freenas-proxmox transitional):"
           dpkg-deb --info "${{ steps.vars.outputs.transitional_deb_file }}"
+          echo ""
+          echo "==> Package info (truenas-proxmox-multipath):"
+          dpkg-deb --info "${{ steps.vars.outputs.multipath_deb_file }}"
 
       - name: Upload package artifacts
         uses: actions/upload-artifact@v4
@@ -221,6 +258,7 @@ jobs:
           path: |
             ${{ steps.vars.outputs.deb_file }}
             ${{ steps.vars.outputs.transitional_deb_file }}
+            ${{ steps.vars.outputs.multipath_deb_file }}
           retention-days: 30
 
   # ── Job 3: Security scan ─────────────────────────────────────────────────────
@@ -340,54 +378,55 @@ jobs:
             "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
             "$PAGES_DIR"
 
-          # Add .deb files to the versioned pool directory
+          # Add .deb files to the versioned pool directories
           mkdir -p "${PAGES_DIR}/pool/v${MAJOR}"
+          mkdir -p "${PAGES_DIR}/pool/multipath/v${MAJOR}"
           cp "${{ needs.build.outputs.deb_file }}" "${PAGES_DIR}/pool/v${MAJOR}/"
           cp "${{ needs.build.outputs.transitional_deb_file }}" "${PAGES_DIR}/pool/v${MAJOR}/"
+          cp "${{ needs.build.outputs.multipath_deb_file }}" "${PAGES_DIR}/pool/multipath/v${MAJOR}/"
 
           # Install apt tooling
           sudo apt-get install -y --no-install-recommends dpkg-dev apt-utils
 
           # Determine which dists to update
-          # v2.x: update v2, main (alias), and v2 (explicit)
-          # v3.x and above: update only the versioned dist
           if [[ "$MAJOR" == "2" ]]; then
             DISTS="v2 main"
           else
             DISTS="v${MAJOR}"
           fi
 
-          for DIST in $DISTS; do
-            mkdir -p "${PAGES_DIR}/dists/${DIST}/main/binary-all"
-            mkdir -p "${PAGES_DIR}/dists/${DIST}/main/binary-amd64"
-            mkdir -p "${PAGES_DIR}/dists/${DIST}/main/binary-arm64"
-
-            # Generate Packages file (paths relative to repo root)
-            dpkg-scanpackages --multiversion "${PAGES_DIR}/pool/v${MAJOR}" \
+          _gen_component() {
+            local PAGES_DIR="$1" DIST="$2" COMP="$3" POOL="$4"
+            mkdir -p "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-all"
+            mkdir -p "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-amd64"
+            mkdir -p "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-arm64"
+            dpkg-scanpackages --multiversion "$POOL" \
               | sed "s|^Filename: ${PAGES_DIR}/|Filename: |" \
-              > "${PAGES_DIR}/dists/${DIST}/main/binary-all/Packages"
-            gzip -kf "${PAGES_DIR}/dists/${DIST}/main/binary-all/Packages"
+              > "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-all/Packages"
+            gzip -kf "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-all/Packages"
+            touch "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-amd64/Packages"
+            gzip -kf "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-amd64/Packages"
+            touch "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-arm64/Packages"
+            gzip -kf "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-arm64/Packages"
+          }
 
-            # Empty arch-specific Packages — all our packages are Architecture: all;
-            # these files silence the apt "doesn't support architecture" warning on
-            # amd64 and arm64 hosts without duplicating package entries.
-            touch "${PAGES_DIR}/dists/${DIST}/main/binary-amd64/Packages"
-            gzip -kf "${PAGES_DIR}/dists/${DIST}/main/binary-amd64/Packages"
-            touch "${PAGES_DIR}/dists/${DIST}/main/binary-arm64/Packages"
-            gzip -kf "${PAGES_DIR}/dists/${DIST}/main/binary-arm64/Packages"
+          for DIST in $DISTS; do
+            _gen_component "$PAGES_DIR" "$DIST" "main" \
+              "${PAGES_DIR}/pool/v${MAJOR}"
+            _gen_component "$PAGES_DIR" "$DIST" "multipath" \
+              "${PAGES_DIR}/pool/multipath/v${MAJOR}"
 
-            # Generate Release file
+            # Generate Release file listing both components
             apt-ftparchive \
               -o "APT::FTPArchive::Release::Origin=truenas-proxmox" \
               -o "APT::FTPArchive::Release::Label=truenas-proxmox" \
               -o "APT::FTPArchive::Release::Suite=${DIST}" \
               -o "APT::FTPArchive::Release::Codename=${DIST}" \
-              -o "APT::FTPArchive::Release::Components=main" \
+              -o "APT::FTPArchive::Release::Components=main multipath" \
               -o "APT::FTPArchive::Release::Architectures=all amd64 arm64" \
               release "${PAGES_DIR}/dists/${DIST}" \
               > "${PAGES_DIR}/dists/${DIST}/Release"
 
-            # Sign → InRelease
             gpg --batch --yes \
               --passphrase "${APT_SIGNING_KEY_PASSPHRASE}" \
               --default-key "${GPG_KEY_ID}" \
@@ -433,32 +472,39 @@ jobs:
           # Replace pool/testing/ contents with the latest build only
           rm -rf "${PAGES_DIR}/pool/testing"
           mkdir -p "${PAGES_DIR}/pool/testing"
+          mkdir -p "${PAGES_DIR}/pool/multipath/testing"
           cp "${{ needs.build.outputs.deb_file }}" "${PAGES_DIR}/pool/testing/"
           cp "${{ needs.build.outputs.transitional_deb_file }}" "${PAGES_DIR}/pool/testing/"
+          cp "${{ needs.build.outputs.multipath_deb_file }}" "${PAGES_DIR}/pool/multipath/testing/"
 
           sudo apt-get install -y --no-install-recommends dpkg-dev apt-utils
 
           DIST="testing"
-          mkdir -p "${PAGES_DIR}/dists/${DIST}/main/binary-all"
-          mkdir -p "${PAGES_DIR}/dists/${DIST}/main/binary-amd64"
-          mkdir -p "${PAGES_DIR}/dists/${DIST}/main/binary-arm64"
 
-          dpkg-scanpackages --multiversion "${PAGES_DIR}/pool/testing" \
-            | sed "s|^Filename: ${PAGES_DIR}/|Filename: |" \
-            > "${PAGES_DIR}/dists/${DIST}/main/binary-all/Packages"
-          gzip -kf "${PAGES_DIR}/dists/${DIST}/main/binary-all/Packages"
+          _gen_component() {
+            local PAGES_DIR="$1" DIST="$2" COMP="$3" POOL="$4"
+            mkdir -p "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-all"
+            mkdir -p "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-amd64"
+            mkdir -p "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-arm64"
+            dpkg-scanpackages --multiversion "$POOL" \
+              | sed "s|^Filename: ${PAGES_DIR}/|Filename: |" \
+              > "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-all/Packages"
+            gzip -kf "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-all/Packages"
+            touch "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-amd64/Packages"
+            gzip -kf "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-amd64/Packages"
+            touch "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-arm64/Packages"
+            gzip -kf "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-arm64/Packages"
+          }
 
-          touch "${PAGES_DIR}/dists/${DIST}/main/binary-amd64/Packages"
-          gzip -kf "${PAGES_DIR}/dists/${DIST}/main/binary-amd64/Packages"
-          touch "${PAGES_DIR}/dists/${DIST}/main/binary-arm64/Packages"
-          gzip -kf "${PAGES_DIR}/dists/${DIST}/main/binary-arm64/Packages"
+          _gen_component "$PAGES_DIR" "$DIST" "main" "${PAGES_DIR}/pool/testing"
+          _gen_component "$PAGES_DIR" "$DIST" "multipath" "${PAGES_DIR}/pool/multipath/testing"
 
           apt-ftparchive \
             -o "APT::FTPArchive::Release::Origin=truenas-proxmox" \
             -o "APT::FTPArchive::Release::Label=truenas-proxmox" \
             -o "APT::FTPArchive::Release::Suite=${DIST}" \
             -o "APT::FTPArchive::Release::Codename=${DIST}" \
-            -o "APT::FTPArchive::Release::Components=main" \
+            -o "APT::FTPArchive::Release::Components=main multipath" \
             -o "APT::FTPArchive::Release::Architectures=all amd64 arm64" \
             release "${PAGES_DIR}/dists/${DIST}" \
             > "${PAGES_DIR}/dists/${DIST}/Release"
@@ -487,6 +533,7 @@ jobs:
           files: |
             ${{ needs.build.outputs.deb_file }}
             ${{ needs.build.outputs.transitional_deb_file }}
+            ${{ needs.build.outputs.multipath_deb_file }}
           generate_release_notes: false
           body: |
             ## truenas-proxmox v${{ needs.build.outputs.version }}
