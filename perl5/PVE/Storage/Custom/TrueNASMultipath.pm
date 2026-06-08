@@ -28,15 +28,18 @@ sub plugindata {
 
 # ── Config properties (extends parent) ───────────────────────────────────────
 
+# Only declare NEW properties here. Inherited TrueNAS.pm properties (truenas_host,
+# truenas_pool, etc.) are already registered globally by TrueNAS.pm — re-declaring
+# them would cause a "duplicate property" error in PVE::SectionConfig.
 sub properties {
-    my $props = PVE::Storage::Custom::TrueNAS::properties();
-    $props->{truenas_portals} = {
-        description => "Comma-separated iSCSI portal IP addresses for multipath "
-                     . "(e.g. '172.31.69.91,192.168.69.91'). Each portal is logged "
-                     . "into separately; dm-multipath aggregates the sessions.",
-        type        => 'string',
+    return {
+        truenas_portals => {
+            description => "Comma-separated iSCSI portal IP addresses for multipath "
+                         . "(e.g. '172.31.69.91,192.168.69.91'). Each portal is logged "
+                         . "into separately; dm-multipath aggregates the sessions.",
+            type        => 'string',
+        },
     };
-    return $props;
 }
 
 sub options {
