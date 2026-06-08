@@ -105,7 +105,7 @@ sub path {
 
 # The base class qemu_blockdev_options builds an iscsi:// blockdev.
 # For multipath we return undef so PVE uses path() instead.
-sub qemu_blockdev_options { return undef; }
+sub qemu_blockdev_options { return; }
 
 # ── activate_volume — login via all portals, wait for mapper device ───────────
 
