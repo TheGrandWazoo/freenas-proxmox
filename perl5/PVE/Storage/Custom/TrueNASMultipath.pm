@@ -104,11 +104,19 @@ sub path {
     return ("/dev/mapper/$wwid", $ext->{lun_id}, $storeid);
 }
 
-# ── qemu_blockdev_options — not used (path returns a block device) ────────────
+# ── qemu_blockdev_options — delegate to Plugin.pm (host_device for /dev/mapper) ─
 
-# The base class qemu_blockdev_options builds an iscsi:// blockdev.
-# For multipath we return undef so PVE uses path() instead.
-sub qemu_blockdev_options { return; }
+# TrueNAS.pm overrides qemu_blockdev_options to return an iscsi:// blockdev —
+# that's wrong for multipath where path() returns /dev/mapper/<wwid>.
+# We skip the parent and call the grandparent (PVE::Storage::Plugin) directly.
+# Plugin.pm calls path(), sees /dev/mapper/<wwid> starts with '/', stats it as a
+# block device (S_ISBLK), and returns { driver => 'host_device', filename => ... }.
+# QEMU then accesses the dm-multipath block device directly.
+sub qemu_blockdev_options {
+    my ($class, $scfg, $storeid, $volname, $machine_version, $options) = @_;
+    return PVE::Storage::Plugin::qemu_blockdev_options(
+        $class, $scfg, $storeid, $volname, $machine_version, $options // {});
+}
 
 # ── activate_volume — login via all portals, wait for mapper device ───────────
 
