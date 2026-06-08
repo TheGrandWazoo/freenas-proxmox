@@ -46,7 +46,7 @@ jobs:
           echo "==> Checking Perl syntax..."
           perl -c -I/tmp/pve-stub perl5/PVE/Storage/Custom/TrueNAS.pm \
             && echo "TrueNAS.pm: OK"
-          perl -c -I/tmp/pve-stub -I/tmp/pve-stub/.. \
+          perl -c -I/tmp/pve-stub -Iperl5 \
             perl5/PVE/Storage/Custom/TrueNASMultipath.pm \
             && echo "TrueNASMultipath.pm: OK"
 
