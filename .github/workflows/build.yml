@@ -224,6 +224,8 @@ jobs:
 
           cp perl5/PVE/Storage/Custom/TrueNASMultipath.pm \
             "${STAGING}/usr/share/truenas-proxmox-multipath/TrueNASMultipath.pm"
+          cp ui/truenas-multipath.js \
+            "${STAGING}/usr/share/truenas-proxmox-multipath/truenas-multipath.js"
           cp packaging/DEBIAN-multipath/multipath.conf.example \
             "${STAGING}/usr/share/truenas-proxmox-multipath/multipath.conf.example"
 

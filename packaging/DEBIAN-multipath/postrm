@@ -3,6 +3,8 @@
 set -e
 
 PLUGIN_DST="/usr/share/perl5/PVE/Storage/Custom/TrueNASMultipath.pm"
+JS_DST="/usr/share/pve-manager/js/truenas-multipath.js"
+TPL="/usr/share/pve-manager/index.html.tpl"
 MULTIPATH_CONF="/etc/multipath.conf"
 BLOCK_BEGIN="# BEGIN truenas-proxmox-multipath"
 BLOCK_END="# END truenas-proxmox-multipath"
@@ -17,6 +19,16 @@ case "$1" in
         if [ -f "$PLUGIN_DST" ]; then
             log "Removing ${PLUGIN_DST}"
             rm -f "$PLUGIN_DST"
+        fi
+
+        if [ -f "$JS_DST" ]; then
+            log "Removing ${JS_DST}"
+            rm -f "$JS_DST"
+        fi
+
+        if [ -f "$TPL" ] && grep -qF 'truenas-multipath.js' "$TPL" 2>/dev/null; then
+            log "Removing <script> tag from ${TPL}"
+            sed -i '/truenas-multipath\.js/d' "$TPL"
         fi
 
         if [ -f "$MULTIPATH_CONF" ] && grep -qF "$BLOCK_BEGIN" "$MULTIPATH_CONF"; then
