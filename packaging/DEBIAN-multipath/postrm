@@ -3,6 +3,9 @@
 set -e
 
 PLUGIN_DST="/usr/share/perl5/PVE/Storage/Custom/TrueNASMultipath.pm"
+MULTIPATH_CONF="/etc/multipath.conf"
+BLOCK_BEGIN="# BEGIN truenas-proxmox-multipath"
+BLOCK_END="# END truenas-proxmox-multipath"
 LOG_FILE="/var/log/truenas-proxmox-install.log"
 
 log() {
@@ -16,9 +19,16 @@ case "$1" in
             rm -f "$PLUGIN_DST"
         fi
 
+        if [ -f "$MULTIPATH_CONF" ] && grep -qF "$BLOCK_BEGIN" "$MULTIPATH_CONF"; then
+            log "Removing TrueNAS stanza from ${MULTIPATH_CONF}"
+            perl -i -0777 -pe \
+                "s|\n?\Q${BLOCK_BEGIN}\E.*?\Q${BLOCK_END}\E\n?||s" \
+                "$MULTIPATH_CONF"
+        fi
+
         log "Restarting Proxmox VE services ..."
-        pvedaemon restart 2>/dev/null && log "pvedaemon restarted" || true
-        pveproxy restart  2>/dev/null && log "pveproxy restarted"  || true
+        if pvedaemon restart 2>/dev/null; then log "pvedaemon restarted"; fi
+        if pveproxy  restart 2>/dev/null; then log "pveproxy restarted";  fi
         log "Done."
         ;;
     upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)

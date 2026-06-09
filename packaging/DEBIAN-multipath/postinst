@@ -17,17 +17,48 @@ install_plugin() {
     cp "${INSTALL_DIR}/TrueNASMultipath.pm" "$PLUGIN_DST"
 }
 
+BLOCK_BEGIN="# BEGIN truenas-proxmox-multipath"
+BLOCK_END="# END truenas-proxmox-multipath"
+
+# Appends or replaces the tagged TrueNAS device stanza in multipath.conf.
+# Safe to call on upgrade — idempotent via BEGIN/END markers.
 install_multipath_conf() {
-    if [ -f "$MULTIPATH_CONF" ]; then
-        log "${MULTIPATH_CONF} already exists — not overwriting"
-        log "Ensure it contains a 'devices' section for TrueNAS iSCSI Disk"
-        log "See ${INSTALL_DIR}/multipath.conf.example for reference"
-        return 0
+    local stanza
+    stanza=$(cat <<STANZA
+${BLOCK_BEGIN}
+# Managed by truenas-proxmox-multipath. Do not edit between these markers.
+# To customise, remove the package tags and maintain the block yourself.
+devices {
+    device {
+        vendor                "TrueNAS"
+        product               "iSCSI Disk"
+        path_grouping_policy  multibus
+        path_checker          tur
+        failback              immediate
+        rr_weight             uniform
+        no_path_retry         5
+    }
+}
+${BLOCK_END}
+STANZA
+)
+
+    if [ ! -f "$MULTIPATH_CONF" ]; then
+        log "Creating ${MULTIPATH_CONF} with defaults + TrueNAS device stanza"
+        printf 'defaults {\n    find_multipaths  yes\n}\n\n%s\n' "$stanza" > "$MULTIPATH_CONF"
+    elif grep -qF "$BLOCK_BEGIN" "$MULTIPATH_CONF"; then
+        log "Updating existing TrueNAS stanza in ${MULTIPATH_CONF}"
+        # Replace the block between markers (inclusive) with the new stanza
+        perl -i -0777 -pe \
+            "s|\Q${BLOCK_BEGIN}\E.*?\Q${BLOCK_END}\E|${stanza}|s" \
+            "$MULTIPATH_CONF"
+    else
+        log "Appending TrueNAS device stanza to existing ${MULTIPATH_CONF}"
+        printf '\n%s\n' "$stanza" >> "$MULTIPATH_CONF"
     fi
-    log "Installing ${MULTIPATH_CONF}"
-    cp "${INSTALL_DIR}/multipath.conf.example" "$MULTIPATH_CONF"
+
     systemctl enable multipathd 2>/dev/null || true
-    systemctl start multipathd  2>/dev/null || true
+    systemctl start  multipathd 2>/dev/null || true
     log "multipathd enabled and started"
 }
 

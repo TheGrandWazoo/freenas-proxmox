@@ -1,12 +1,19 @@
-# /etc/multipath.conf — installed by truenas-proxmox-multipath
-# This file is only created if /etc/multipath.conf does not already exist.
-# If you have an existing multipath.conf, merge the 'devices' section below
-# into it manually.
+# /etc/multipath.conf — reference for truenas-proxmox-multipath
+#
+# postinst installs this automatically if /etc/multipath.conf does not exist.
+# If you already have a multipath.conf, postinst appends the tagged block below
+# instead of overwriting your file.
+#
+# The BEGIN/END markers let postinst update the stanza on upgrade and postrm
+# strip it on remove without touching the rest of your config.
 
 defaults {
     find_multipaths  yes
 }
 
+# BEGIN truenas-proxmox-multipath
+# Managed by truenas-proxmox-multipath. Do not edit between these markers.
+# To customise, remove the package tags and maintain the block yourself.
 devices {
     device {
         vendor                "TrueNAS"
@@ -18,3 +25,4 @@ devices {
         no_path_retry         5
     }
 }
+# END truenas-proxmox-multipath
