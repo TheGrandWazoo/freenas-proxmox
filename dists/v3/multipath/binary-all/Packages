@@ -1,0 +1,25 @@
+Package: truenas-proxmox-multipath
+Version: 3.2.0-1
+Architecture: all
+Maintainer: KSA Technologies, LLC <theprofessor@ksatechnologies.com>
+Depends: truenas-proxmox (>= 3.1.0), open-iscsi, multipath-tools
+Filename: pool/multipath/v3/truenas-proxmox-multipath_3.2.0-1_all.deb
+Size: 7524
+MD5sum: 6b969f115d03a35bf88eef11b7aed727
+SHA1: 96fc195f85d230535e30e212de901d03fba0d6ea
+SHA256: 43bbd36d46a25e59c5967a29a29c208558ffada3d15b3afb194f5fd663d11f08
+Section: perl
+Priority: optional
+Homepage: https://github.com/TheGrandWazoo/truenas-proxmox
+Description: TrueNAS Multipath Storage Plugin for Proxmox VE
+ Extends truenas-proxmox with kernel iSCSI multipath support via iscsiadm
+ and dm-multipath. Registers a separate 'truenas-multipath' storage type
+ that presents /dev/mapper/<wwid> block devices to QEMU instead of
+ iscsi:// URIs, enabling active/active multipath with failover.
+ .
+ Requires two or more network paths between Proxmox and TrueNAS and
+ TrueNAS iSCSI portals configured on each path.
+ .
+ Licensed under the GNU Affero General Public License v3 (AGPL-3.0).
+ Copyright (c) 2020 KSA Technologies, LLC.
+
