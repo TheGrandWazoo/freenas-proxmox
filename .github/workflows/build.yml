@@ -412,18 +412,29 @@ jobs:
             gzip -kf "${PAGES_DIR}/dists/${DIST}/${COMP}/binary-arm64/Packages"
           }
 
+          _dist_codename() {
+            case "$1" in
+              v2|main) echo "limelight" ;;
+              v3)      echo "error"     ;;
+              v4)      echo "rivendell" ;;
+              *)       echo "$1"        ;;
+            esac
+          }
+
           for DIST in $DISTS; do
             _gen_component "$PAGES_DIR" "$DIST" "main" \
               "${PAGES_DIR}/pool/v${MAJOR}"
             _gen_component "$PAGES_DIR" "$DIST" "multipath" \
               "${PAGES_DIR}/pool/multipath/v${MAJOR}"
 
+            CODENAME=$(_dist_codename "$DIST")
+
             # Generate Release file listing both components
             apt-ftparchive \
               -o "APT::FTPArchive::Release::Origin=truenas-proxmox" \
               -o "APT::FTPArchive::Release::Label=truenas-proxmox" \
               -o "APT::FTPArchive::Release::Suite=${DIST}" \
-              -o "APT::FTPArchive::Release::Codename=${DIST}" \
+              -o "APT::FTPArchive::Release::Codename=${CODENAME}" \
               -o "APT::FTPArchive::Release::Components=main multipath" \
               -o "APT::FTPArchive::Release::Architectures=all amd64 arm64" \
               release "${PAGES_DIR}/dists/${DIST}" \
@@ -506,7 +517,7 @@ jobs:
             -o "APT::FTPArchive::Release::Origin=truenas-proxmox" \
             -o "APT::FTPArchive::Release::Label=truenas-proxmox" \
             -o "APT::FTPArchive::Release::Suite=${DIST}" \
-            -o "APT::FTPArchive::Release::Codename=${DIST}" \
+            -o "APT::FTPArchive::Release::Codename=testing" \
             -o "APT::FTPArchive::Release::Components=main multipath" \
             -o "APT::FTPArchive::Release::Architectures=all amd64 arm64" \
             release "${PAGES_DIR}/dists/${DIST}" \
