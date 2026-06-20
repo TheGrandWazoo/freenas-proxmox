@@ -70,6 +70,14 @@ STANZA
             "$MULTIPATH_CONF"
     else
         log "Appending TrueNAS device stanza to existing ${MULTIPATH_CONF}"
+        # Strip any pre-existing unmanaged devices block to prevent duplicate
+        # keyword warnings in multipathd (e.g. user had a manual block before install).
+        if grep -qE '^\s*devices\s*\{' "$MULTIPATH_CONF"; then
+            log "Removing pre-existing unmanaged devices block from ${MULTIPATH_CONF}"
+            perl -i -0777 -pe \
+                's/\n*\ndevices\s*\{(?:[^{}]*|\{[^{}]*\})*\}\n*//gs' \
+                "$MULTIPATH_CONF"
+        fi
         printf '\n%s\n' "$stanza" >> "$MULTIPATH_CONF"
     fi
 
