@@ -60,7 +60,7 @@ Replaced Cloudsmith as the primary package distribution channel. Per-major-versi
 | Component | Content |
 |-----------|---------|
 | `main` | Base plugin (all installs) |
-| `multipath` | `truenas-proxmox-multipath` — future opt-in, [#256](https://github.com/TheGrandWazoo/freenas-proxmox/issues/256) |
+| `multipath` | `truenas-proxmox-multipath` — optional add-on, [#256](https://github.com/TheGrandWazoo/freenas-proxmox/issues/256) |
 
 ### Cloudsmith transition state (2026-06-06)
 
@@ -93,19 +93,19 @@ gh repo rename truenas-proxmox --repo TheGrandWazoo/freenas-proxmox
 
 ---
 
-## Upcoming — v3.1.0 (PVE 9 + Snapshots)
+## Released — v3.1.0 (PVE 9 + Snapshots)
 
-**Target:** Before PVE 8 EOL — 2026-08-31  
+**Released:** 2026-06-07  
 **PVE support:** PVE 9.x only — PVE 8 support dropped  
 **Decision date:** 2026-05-31 — see ADR-009  
-**Milestone:** [v3.1.0 — PVE 9 + Snapshots](https://github.com/TheGrandWazoo/freenas-proxmox/milestone/4)
+**GitHub Release:** https://github.com/TheGrandWazoo/freenas-proxmox/releases/tag/v3.1.0
 
 v3.1 is the first release that requires PVE 9. Dropping PVE 8 allows:
 - Bumping `api()` to PVE 9's `APIVER` (silences "older storage API" warning)
 - Implementing snapshot-as-volume-chains (PVE 9 feature)
 - Removing the `qemu_blockdev_options` override if Proxmox fixes `Plugin.pm` upstream
 
-### Completed in v3.1.0 (in progress)
+### Completed in v3.1.0
 
 | # | Title | Commit |
 |---|-------|--------|
@@ -119,24 +119,48 @@ v3.1 is the first release that requires PVE 9. Dropping PVE 8 allows:
 
 **Snapshot implementation (2026-06-07):** Verified on PVE 9.2.3 against TrueNAS CORE 13.0-U6 and SCALE 24.10. Disk-only and RAM snapshots both confirmed working end-to-end including rollback.
 
-### Open in v3.1.0
+### Carried forward
 
 | # | Title | Notes |
 |---|-------|-------|
-| [#277](https://github.com/TheGrandWazoo/freenas-proxmox/issues/277) | iSCSI GET_LBA_STATUS error on VM start | Log noise, non-fatal |
-| [#256](https://github.com/TheGrandWazoo/freenas-proxmox/issues/256) | Multipath — separate plugin (ADR-011) | Hardware-blocked |
+| [#277](https://github.com/TheGrandWazoo/freenas-proxmox/issues/277) | iSCSI GET_LBA_STATUS error on VM start | Log noise, non-fatal — open |
 
-| # | Title | Notes |
-|---|-------|-------|
-| [#234](https://github.com/TheGrandWazoo/freenas-proxmox/issues/234) | Snapshot interface (Snapshot-as-Volume-Chains) | ✅ Done |
-| [#270](https://github.com/TheGrandWazoo/freenas-proxmox/issues/270) | Bump `api()` to PVE 9 APIVER | ✅ Done |
-| [#272](https://github.com/TheGrandWazoo/freenas-proxmox/issues/272) | GitHub Pages testing dist track (replace Cloudsmith testing) | Required |
-| [#256](https://github.com/TheGrandWazoo/freenas-proxmox/issues/256) | Multipath — separate `truenas-proxmox-multipath` plugin (ADR-011) | Blocked on hardware |
-| [#249](https://github.com/TheGrandWazoo/freenas-proxmox/issues/249) | Per-variant dispatch (TrueNAS-Core.pm / TrueNAS-Scale.pm) | Evaluate |
+---
 
-### Multipath design decision (2026-06-06)
+## Released — v3.2.0 (Multipath)
 
-Multipath ships as a **separate plugin** (`TrueNASMultipath.pm`) in a separate package (`truenas-proxmox-multipath`), distributed via the `multipath` apt component — not as a boolean option in the base plugin. See ADR-011 and [#256](https://github.com/TheGrandWazoo/freenas-proxmox/issues/256).
+**Released:** 2026-06-20  
+**GitHub Release:** https://github.com/TheGrandWazoo/freenas-proxmox/releases/tag/v3.2.0
+
+Introduces the `truenas-proxmox-multipath` optional add-on package. Active-active iSCSI multipath via dm-multipath. Separate plugin (`TrueNASMultipath.pm`) in the `multipath` apt component — not part of the base plugin. See ADR-011.
+
+### Confirmed tested
+
+| Component | Versions |
+|-----------|---------|
+| Proxmox VE | 9.2.x |
+| TrueNAS CORE | 13.0-U6 (FreeBSD / ALUA) |
+| TrueNAS SCALE | 24.10 Electric Eel, 25.04 |
+
+**Path mode:** Active-active (`multibus` + `service-time 0`) — both paths carry I/O simultaneously. Failover and path recovery confirmed on CORE and SCALE 25.04.
+
+### What shipped
+
+| # | Title | Commit |
+|---|-------|--------|
+| [#256](https://github.com/TheGrandWazoo/freenas-proxmox/issues/256) | Multipath plugin — `truenas-proxmox-multipath` package (ADR-011) | da82356 |
+| [#278](https://github.com/TheGrandWazoo/freenas-proxmox/issues/278) | Multipath UI panel (`truenas-multipath` in Datacenter → Storage → Add) | da82356 |
+| [#279](https://github.com/TheGrandWazoo/freenas-proxmox/issues/279) | postinst: strip pre-existing unmanaged devices block in multipath.conf | b7acb60 |
+
+### Known differences: CORE vs SCALE multipath
+
+| | TrueNAS CORE (FreeBSD) | TrueNAS SCALE (Linux) |
+|---|---|---|
+| iSCSI target | `ctld` | Linux LIO |
+| ALUA | Yes — `hwhandler='1 alua'`, `prio=50` | No — `hwhandler='0'`, `prio=1` |
+| Portal config | `0.0.0.0` (all interfaces) | Per-IP listen addresses required |
+| Failover time | ~2s (ALUA state query) | <0.1s |
+| SCALE 25.04 note | — | `port` field rejected in `PUT /api/v2.0/iscsi/portal` — omit it ([#280](https://github.com/TheGrandWazoo/freenas-proxmox/issues/280)) |
 
 ---
 
