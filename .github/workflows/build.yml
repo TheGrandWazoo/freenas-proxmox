@@ -448,6 +448,15 @@ jobs:
               "${PAGES_DIR}/dists/${DIST}/Release"
           done
 
+          # Create codename alias directories (e.g. dists/error/ mirrors dists/v3/)
+          # so that both Suite ("v3") and Codename ("error") work in sources.list.
+          for DIST in $DISTS; do
+            CODENAME=$(_dist_codename "$DIST")
+            if [[ "$CODENAME" != "$DIST" ]]; then
+              cp -r "${PAGES_DIR}/dists/${DIST}" "${PAGES_DIR}/dists/${CODENAME}"
+            fi
+          done
+
           # Commit and push
           cd "$PAGES_DIR"
           git config user.name "github-actions[bot]"
