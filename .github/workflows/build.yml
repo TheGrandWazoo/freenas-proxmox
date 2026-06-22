@@ -450,9 +450,11 @@ jobs:
 
           # Create codename alias directories (e.g. dists/error/ mirrors dists/v3/)
           # so that both Suite ("v3") and Codename ("error") work in sources.list.
+          # rm -rf first: cp -r puts src inside dst when dst already exists.
           for DIST in $DISTS; do
             CODENAME=$(_dist_codename "$DIST")
             if [[ "$CODENAME" != "$DIST" ]]; then
+              rm -rf "${PAGES_DIR}/dists/${CODENAME}"
               cp -r "${PAGES_DIR}/dists/${DIST}" "${PAGES_DIR}/dists/${CODENAME}"
             fi
           done

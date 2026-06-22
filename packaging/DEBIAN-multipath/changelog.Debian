@@ -1,3 +1,9 @@
+truenas-proxmox-multipath (3.2.1-1) bookworm; urgency=low
+
+  * Version bump to match truenas-proxmox 3.2.1; no functional changes
+
+ -- KSA Technologies, LLC <theprofessor@ksatechnologies.com>  Sun, 22 Jun 2026 00:00:00 +0000
+
 truenas-proxmox-multipath (3.1.0-1) bookworm; urgency=low
 
   * Initial release — kernel iSCSI multipath via iscsiadm + dm-multipath

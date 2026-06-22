@@ -1,3 +1,9 @@
+freenas-proxmox (3.2.1-1) bookworm; urgency=low
+
+  * Version bump to match truenas-proxmox 3.2.1; no functional changes
+
+ -- KSA Technologies, LLC <theprofessor@ksatechnologies.com>  Sun, 22 Jun 2026 00:00:00 +0000
+
 freenas-proxmox (3.0.0-1) bookworm; urgency=low
 
   * Transitional package — installs truenas-proxmox automatically
