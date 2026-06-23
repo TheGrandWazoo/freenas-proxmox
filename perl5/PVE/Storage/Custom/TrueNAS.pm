@@ -29,14 +29,14 @@ use PVE::Storage::Plugin;
 
 use base qw(PVE::Storage::Plugin);
 
-our $VERSION = '3.2.1';
+our $VERSION = '3.2.2';
 
 # Per-host runtime state cache
 my $state = {};
 
 # ── Plugin identity ───────────────────────────────────────────────────────────
 
-sub api  { return 14; }
+sub api  { return 15; }
 sub type { return 'truenas'; }
 
 sub plugindata {
