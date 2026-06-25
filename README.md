@@ -136,6 +136,14 @@ sudo apt update && sudo apt install truenas-proxmox
 automatically promoted to a future v4 — that requires changing the dist track in
 your `sources.list` to `v4`.
 
+> **Existing users — one-time prompt after v3.2.2**
+> If `apt update` shows `changed its 'Codename' value from 'v3' to 'error'`, run:
+> ```bash
+> apt update --allow-releaseinfo-change
+> ```
+> This happened once when codename aliases were added in v3.2.2. It will not recur.
+> Both `v3` (Suite) and `error` (Codename) continue to work in `sources.list`.
+
 ### Upgrading from v2.x
 
 **v3.0 is a breaking change.** Do not run `apt upgrade` until you have read the

@@ -93,11 +93,20 @@ sudo apt update
 
 ## Dist track reference
 
-| Dist track | Contains | Who should use it |
-|---|---|---|
-| `main` | v2.x packages only | Users staying on v2.x |
-| `v2` | v2.x packages (alias for `main`) | Same as `main` — explicit pin |
-| `v3` | v3.x packages only | All current v3 installs |
-| `v4` | v4.x packages only | Added when v4.0 ships |
+| Dist track | Codename alias | Contains | Who should use it |
+|---|---|---|---|
+| `main` | `limelight` | v2.x packages only | Users staying on v2.x |
+| `v2` | `limelight` | v2.x packages (alias for `main`) | Same as `main` — explicit pin |
+| `v3` | `error` | v3.x packages only | All current v3 installs |
+| `v4` | `rivendell` | v4.x packages only | Added when v4.0 ships |
+
+Both the dist track (`v3`) and its codename alias (`error`) work in `sources.list` — they resolve to the same packages.
 
 Packages on one dist track are never promoted to another. Changing major versions always requires an explicit `sources.list` edit.
+
+> **Existing v3 users — one-time prompt after v3.2.2**
+> If `apt update` reports `changed its 'Codename' value from 'v3' to 'error'`, run:
+> ```bash
+> apt update --allow-releaseinfo-change
+> ```
+> This is a one-time acknowledgment of the codename being added in v3.2.2. It will not recur.

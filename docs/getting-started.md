@@ -289,6 +289,18 @@ This is expected and not an error. Proxmox creates disks in GiB (base-2) but Tru
 
 TPM state (`tpmstate0`) is a known limitation — this storage type cannot hold TPM state disks. When creating a VM with TPM/Secure Boot, configure a different storage (such as `local-lvm` or NFS) for the `tpmstate0` disk. All other disk types work normally.
 
+### 6.8 `apt update` Says Codename Changed from `v3` to `error`
+
+This is a one-time prompt from apt's security model. In v3.2.2, a codename alias (`error`) was added to the `v3` dist — apt flags metadata changes like this and requires explicit acceptance before continuing.
+
+Run this once:
+
+```bash
+apt update --allow-releaseinfo-change
+```
+
+After that, `apt update` works normally and this prompt will not appear again for any future v3.x release. Both `v3` (Suite) and `error` (Codename) work in `sources.list` and point to the same packages.
+
 ---
 
 ## 7. Uninstalling
