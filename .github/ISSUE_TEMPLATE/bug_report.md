@@ -11,7 +11,7 @@ assignees: TheGrandWazoo
 | Component | Version |
 |-----------|---------|
 | Plugin (`dpkg -l truenas-proxmox freenas-proxmox`) | |
-| Proxmox VE (`pveversion`) | |
+| Proxmox VE (`pveversion -v`) | |
 | TrueNAS type | CORE / SCALE |
 | TrueNAS version | |
 | Authentication method | Token / Password |
@@ -39,7 +39,7 @@ What actually happened.
 Run the following on your Proxmox node and paste the output:
 
 ```bash
-grep -i freenas /var/log/syslog | tail -50
+journalctl -u pvedaemon --since "1 hour ago" | grep -i -E "truenas|freenas|iscsi" | tail -50
 ```
 
 ```
