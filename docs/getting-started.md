@@ -301,6 +301,29 @@ apt update --allow-releaseinfo-change
 
 After that, `apt update` works normally and this prompt will not appear again for any future v3.x release. Both `v3` (Suite) and `error` (Codename) work in `sources.list` and point to the same packages.
 
+### 6.9 `PUT /api/v2.0/iscsi/portal/id/<n>` Returns "Extra inputs are not permitted" on SCALE 25.04+
+
+TrueNAS SCALE 25.04 tightened the portal PUT schema. The `port` field is no longer accepted in PUT requests — GET still returns it, but sending it back causes a validation error:
+
+```json
+{"iscsi_portal_update.listen.0.port": [{"message": "Extra inputs are not permitted", "errno": 22}]}
+```
+
+This only affects admins who manually call the TrueNAS REST API (e.g., via curl or scripts). The plugin does not create or modify portals.
+
+**Fix:** Omit `port` from the `listen` array in PUT requests:
+
+```bash
+# Correct — SCALE 25.04+
+curl -sk -X PUT -H "Authorization: Bearer <key>" \
+  -H "Content-Type: application/json" \
+  -d '{"listen": [{"ip": "0.0.0.0"}]}' \
+  https://<truenas>/api/v2.0/iscsi/portal/id/1
+
+# Wrong — causes error on SCALE 25.04+
+# -d '{"listen": [{"ip": "0.0.0.0", "port": 3260}]}'
+```
+
 ---
 
 ## 7. Uninstalling

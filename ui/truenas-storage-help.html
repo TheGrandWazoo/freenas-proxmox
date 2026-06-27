@@ -209,6 +209,12 @@ the per-VM target is automatically removed.</p>
     <td>SCALE 25.04+ may revoke keys on upgrade. Generate a new API key and update the storage
         config in Proxmox.</td>
   </tr>
+  <tr>
+    <td>Portal PUT returns "Extra inputs are not permitted" (SCALE 25.04+)</td>
+    <td>Omit the <code>port</code> field from <code>listen</code> in
+        <code>PUT /api/v2.0/iscsi/portal/id/&lt;n&gt;</code>. SCALE 25.04 no longer accepts
+        it. See §6.9 in getting-started.md.</td>
+  </tr>
 </table>
 
 <h2>Checking Logs</h2>
