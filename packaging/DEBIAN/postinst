@@ -42,6 +42,8 @@ restart_pve_services() {
     log "Restarting Proxmox VE services ..."
     pvedaemon restart && log "pvedaemon restarted"
     pveproxy restart  && log "pveproxy restarted"
+    pvestatd restart  && log "pvestatd restarted"
+    systemctl restart pve-ha-lrm pve-ha-crm && log "pve-ha-lrm, pve-ha-crm restarted"
     log "Done. Refresh your Proxmox browser tab."
 }
 
