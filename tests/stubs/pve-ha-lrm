@@ -1,0 +1,9 @@
+#!/bin/bash
+# Stub for the real /usr/sbin/pve-ha-lrm PVE::HA daemon binary.
+# Unlike pvedaemon/pveproxy/pvestatd, the real binary does NOT support
+# "restart" — only start, stop, status, help. This must be restarted via
+# systemctl instead (see systemctl stub). Ref: #179.
+case "$1" in
+    start|stop|status|help) exit 0 ;;
+    *) echo "pve-ha-lrm: unknown command '$1'" >&2; exit 1 ;;
+esac

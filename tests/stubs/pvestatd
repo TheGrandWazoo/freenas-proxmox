@@ -1,0 +1,7 @@
+#!/bin/bash
+# Stub for the real /usr/bin/pvestatd PVE::Daemon wrapper.
+# Real binary supports: start, stop, restart, reload, status, help.
+case "$1" in
+    start|stop|restart|reload|status) exit 0 ;;
+    *) echo "pvestatd: unknown command '$1'" >&2; exit 1 ;;
+esac

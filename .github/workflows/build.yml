@@ -68,6 +68,11 @@ jobs:
             packaging/DEBIAN-multipath/postrm
           echo "Shell scripts OK"
 
+      - name: Test postinst/postrm service restarts
+        run: |
+          echo "==> Running tests/test-restart-services.sh..."
+          bash tests/test-restart-services.sh
+
   # ── Job 2: Build .deb ────────────────────────────────────────────────────────
   build:
     name: Build Package

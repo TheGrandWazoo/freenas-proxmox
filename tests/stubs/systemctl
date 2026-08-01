@@ -1,0 +1,25 @@
+#!/bin/bash
+# Stub for systemctl, scoped to what restart_pve_services() actually calls:
+# `systemctl restart <unit> [<unit>...]` against known PVE service units.
+KNOWN_UNITS="pvedaemon pveproxy pvestatd pve-ha-lrm pve-ha-crm"
+
+case "$1" in
+    restart)
+        shift
+        if [[ $# -eq 0 ]]; then
+            echo "systemctl: restart requires at least one unit" >&2
+            exit 1
+        fi
+        for unit in "$@"; do
+            if [[ ! " $KNOWN_UNITS " =~ \ ${unit}\  ]]; then
+                echo "systemctl: unknown unit '${unit}'" >&2
+                exit 1
+            fi
+        done
+        exit 0
+        ;;
+    *)
+        echo "systemctl: unsupported command '$1' in test stub" >&2
+        exit 1
+        ;;
+esac

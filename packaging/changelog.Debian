@@ -1,3 +1,16 @@
+truenas-proxmox (3.2.4-1) bookworm; urgency=medium
+
+  * Fix postinst/postrm to also restart pvestatd, pve-ha-lrm, pve-ha-crm on
+    install/upgrade/remove — pve-ha-lrm/pve-ha-crm previously kept running
+    against the pre-install PVE::Storage state, so HA-managed VMs on TrueNAS
+    storage failed to start (#179)
+  * pve-ha-lrm/pve-ha-crm restarted via systemctl (no restart subcommand);
+    all restarts changed from `cmd && log ...` to bare statements so a
+    genuine failure aborts the script instead of being silently swallowed
+    by set -e's && exemption
+
+ -- KSA Technologies, LLC <theprofessor@ksatechnologies.com>  Sat, 01 Aug 2026 00:00:00 +0000
+
 truenas-proxmox (3.2.2-1) bookworm; urgency=low
 
   * Bump api() return value from 14 to 15 to match PVE 9 APIVER — silences
