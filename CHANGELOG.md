@@ -8,6 +8,84 @@ See each [GitHub Release](https://github.com/TheGrandWazoo/truenas-proxmox/relea
 
 ---
 
+## [Unreleased]
+
+### Documentation
+- README, getting-started.md, and the in-UI help panel updated for TrueNAS SCALE 25.04's UI changes (API key screen moved, standalone portal/initiator-group screen replaced by the iSCSI Share wizard) and to match the actual v3 storage panel fields, which had drifted from the v2.x field set still described in the docs (#286)
+
+---
+
+## [3.2.4] — 2026-08-01
+
+### Fixed
+- HA-managed VMs on TrueNAS storage could fail to start after installing or upgrading the plugin — `postinst`/`postrm` only restarted `pvedaemon`/`pveproxy` and never `pve-ha-lrm`/`pve-ha-crm`/`pvestatd`; all are now restarted on install/remove, with a regression test added (#179)
+
+---
+
+## [3.2.3] — 2026-06-27
+
+### Documentation
+- Documented the one-time apt codename prompt existing users see when upgrading past v3.2.2 (`apt update --allow-releaseinfo-change`)
+- Added a SCALE 25.04 portal PUT port field callout (#280)
+- Updated the bug report template to request `pveversion -v` output and a `journalctl` log command
+
+---
+
+## [3.2.2] — 2026-06-23
+
+### Fixed
+- `api()` bumped to 15 to match PVE 9's storage APIVER, silencing the "implementing an older storage API" warning seen on PVE 9
+
+---
+
+## [3.2.1] — 2026-06-22
+
+### Added
+- Apt dist codenames per major version: `limelight` (v2), `error` (v3), `rivendell` (v4)
+
+### Fixed
+- Codename alias directories weren't generated correctly, breaking `error`/`limelight`/`rivendell` entries in `sources.list`
+- `cp -r` overwrite bug when creating the `dists/error` codename alias
+
+---
+
+## [3.2.0] — 2026-06-20
+
+### Added
+- Multipath iSCSI support, shipped as a separate, independently installable plugin — `truenas-proxmox-multipath` / `TrueNASMultipath.pm` — distributed via its own apt component so it doesn't touch the base plugin (#256)
+- UI panel for the `truenas-multipath` storage type (#278)
+
+### Fixed
+- `multipath.conf` now managed safely via a tagged `BEGIN`/`END` block; pre-existing unmanaged devices blocks are stripped before injecting the managed stanza
+- `qemu_blockdev_options` delegated to `Plugin.pm` for the `host_device` path
+- Multipath `activate_volume` and `naa` field lookup in `_find_extent`
+- Stale version accumulation in the apt pool/multipath/testing dists before publish
+
+---
+
+## [3.1.0] — 2026-06-07
+
+### Added
+- ZFS snapshot interface via the TrueNAS REST API (#234)
+- GitHub Pages apt repository as the testing dist track; Cloudsmith testing track retired (#272)
+- ADR-010: per-major-version apt dist tracks (supersedes ADR-003)
+- ADR-011: apt components for optional feature packages
+- Cloudsmith → GitHub Pages migration script and upgrade-paths documentation
+
+### Changed
+- `api()` bumped to 14 for PVE 9 compatibility
+- Stable v3+ releases no longer published to Cloudsmith
+
+### Fixed
+- `parse_volname` now accepts the state-volume naming pattern (#234)
+- Debian changelog added to both packages (#273)
+- Testing dist channel name and broken README badges (#275)
+- `Filename:` prefix restored in CI apt Packages generation (#274)
+- gh-pages push now uses `GITHUB_TOKEN` (previous `ACCESS_TOKEN` had expired)
+- Apt arch warning in the Cloudsmith migration script
+
+---
+
 ## [3.0.0] — 2026-05-31
 
 ### Added
