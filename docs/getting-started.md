@@ -31,11 +31,21 @@ If the output shows `pve-manager/7.x`, stay on plugin v2.x — v3.0 does not sup
 
 The plugin creates per-VM iSCSI targets for you automatically. It does **not** create the iSCSI service infrastructure — you must set that up once.
 
-**On TrueNAS SCALE:**
+**On TrueNAS SCALE 24.10 (pre-25.04):**
 1. Go to **Shares → iSCSI → Configure**
 2. Under **Portals**, add a portal that listens on the IP address your Proxmox nodes use to reach TrueNAS (or `0.0.0.0` to listen on all interfaces). Note the portal's IP address — you will need it.
 3. Under **Initiators**, add an initiator group. You can leave it open (allow all) for initial setup; lock it down to specific Proxmox node IPs later.
 4. Enable the iSCSI service and confirm it is running.
+
+**On TrueNAS SCALE 25.04+:**
+
+The UI no longer exposes a standalone screen to configure just a portal and an initiator group — that configuration is now only reachable by walking through the full iSCSI **Share wizard**. The plugin doesn't need the share itself, only the portal and initiator group the wizard leaves behind, so the workaround is to create one throwaway share and then delete it:
+
+1. Go to **Shares → iSCSI → Add** and complete the wizard: pick or create a zvol, accept the default portal (listening on `0.0.0.0` or your chosen IP), and accept or create an initiator group.
+2. Finish the wizard. This creates a zvol, an extent, a target, and (if they didn't already exist) a portal and initiator group.
+3. Confirm the iSCSI service is enabled and running (**System → Services**, or the toggle shown at the end of the wizard).
+4. Go to **Datasets**, find the zvol the wizard created, and delete it. This also removes the extent and target the wizard created. The portal and initiator group are **not** removed — they persist and are what the plugin needs.
+5. In Proxmox, configure the plugin's storage (see [Configuration](#4-first-storage-configuration-in-the-proxmox-ui) below), then create a test VM disk through it to confirm the plugin can reach the portal/initiator-group configuration left behind by the wizard.
 
 **On TrueNAS CORE:**
 1. Go to **Sharing → Block Shares (iSCSI)**
@@ -49,7 +59,10 @@ You do **not** need to create any targets or extents by hand — the plugin crea
 
 The plugin authenticates with TrueNAS using an API key (Bearer token). No username or password is used.
 
-**On TrueNAS SCALE:**
+**On TrueNAS SCALE 25.04+:**
+Go to **Credentials → API Keys → Add**. Give it a descriptive name such as `proxmox-plugin`. Copy the key — it is shown only once.
+
+**On TrueNAS SCALE (pre-25.04):**
 Go to **System Settings → API Keys → Add**. Give it a descriptive name such as `proxmox-plugin`. Copy the key — it is shown only once.
 
 **On TrueNAS CORE:**

@@ -92,8 +92,16 @@ Each VM gets its own dedicated iSCSI target — no SSH keys or pre-created targe
   <li>TrueNAS CORE 13.0-U6+ or TrueNAS SCALE 24.10 (Electric Eel)+</li>
   <li>iSCSI service enabled on TrueNAS with at least one portal and one initiator group configured</li>
   <li>TCP 443 (HTTPS API) and TCP 3260 (iSCSI) reachable from every Proxmox node to TrueNAS</li>
-  <li>An API key generated in TrueNAS (System Settings → API Keys)</li>
+  <li>An API key generated in TrueNAS (SCALE 25.04+: <code>Credentials → API Keys</code>;
+      SCALE pre-25.04: <code>System Settings → API Keys</code>; CORE: gear icon → <code>API Keys</code>)</li>
 </ul>
+
+<div class="warn">
+  <strong>TrueNAS SCALE 25.04+</strong> no longer exposes a standalone portal/initiator-group
+  screen — only the full iSCSI Share wizard (<code>Shares → iSCSI → Add</code>). Run the wizard
+  once to create a throwaway share, then delete the zvol it created (this also removes the
+  extent/target, but leaves the portal and initiator group in place for the plugin to use).
+</div>
 
 <div class="warn">
   <strong>TPM state disks</strong> (<code>tpmstate0</code>) cannot be stored on this storage type.

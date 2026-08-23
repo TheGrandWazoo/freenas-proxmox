@@ -87,8 +87,11 @@ v3.0 is a fully API-driven custom storage plugin. No SSH keys required.
 
 1. On **TrueNAS**, ensure the iSCSI service is running and an iSCSI **portal** and **initiator group** are configured. The plugin creates per-VM iSCSI targets automatically — you do not need to pre-create a target.
 
+   > **TrueNAS SCALE 25.04+:** the UI no longer exposes a standalone portal/initiator-group configuration screen — only the full iSCSI **Share wizard** (*Shares → iSCSI → Add*). Run the wizard once to create a throwaway share (this leaves a usable portal and initiator group behind), then delete the zvol/share the wizard created. The portal and initiator group persist after that deletion, and the plugin takes over from there. See [docs/getting-started.md §2.3](docs/getting-started.md#23-iscsi-service-on-truenas) for the full walkthrough.
+
 2. Generate a TrueNAS API key:
-   - TrueNAS SCALE: *System Settings → API Keys → Add*
+   - TrueNAS SCALE 25.04+: *Credentials → API Keys → Add*
+   - TrueNAS SCALE (pre-25.04): *System Settings → API Keys → Add*
    - TrueNAS CORE 13: *gear icon (top-right) → API Keys → Add*
 
    Copy the key — you will need it during storage configuration in Proxmox.
@@ -245,57 +248,49 @@ To switch back to stable, replace `testing` with `v3` in your sources.list and r
 
 ## Configuration
 
-After installation, **refresh your browser** to load the updated Proxmox UI. Then add a new ZFS-over-iSCSI storage:
+After installation, **refresh your browser** to load the updated Proxmox UI. Then add a new storage:
 
-1. Navigate to **Datacenter → Storage → Add → ZFS over iSCSI**
-2. Set **iSCSI Provider** to **FreeNAS/TrueNAS API**
-3. Fill in the storage fields — see below for authentication options
+1. Navigate to **Datacenter → Storage → Add → TrueNAS (ZFS/iSCSI)**
+2. Fill in the storage fields — see the table below
 
-### Authentication: API Token (Recommended)
-
-| Field | Value |
-|-------|-------|
-| Portal | IP or hostname of your TrueNAS server |
-| Target | The iSCSI target IQN |
-| Pool | The ZFS pool name |
-| Use SSL | Enabled (recommended) |
-| API Host | Leave blank to use Portal IP, or specify a separate management IP |
-| Use Token Auth | **Enabled** |
-| API Token | Paste the TrueNAS API key you generated |
-
-### Authentication: Username / Password (Legacy)
+### Fields
 
 | Field | Value |
 |-------|-------|
-| Use Token Auth | Disabled |
-| Username | TrueNAS API user (usually `root`) |
-| Password | TrueNAS user password |
+| ID | A short name, e.g. `truenas-vms`. Cannot be changed later. |
+| TrueNAS Host | IP or hostname of your TrueNAS server. Also used as the iSCSI portal address unless Portal IP is set separately. |
+| API Key | Paste the TrueNAS API key you generated. Leave blank at creation time only if you plan to use a [keyfile](#securing-the-api-token-recommended-for-production) instead. |
+| Pool / Dataset Path | The ZFS pool or dataset path where VM disks are created, e.g. `tank` or `tank/proxmox/vdisks`. |
+| Sub-dataset | Optional — extra sub-path appended below Pool / Dataset Path. Leave blank in most cases. |
+| Shared | Enabled (required for clusters). |
+| Use SSL | Enabled (recommended). |
+| Verify SSL Certificate | Disabled unless TrueNAS has a valid CA-signed certificate (most homelab setups use self-signed certs). |
+| Portal IP | Optional — leave blank unless the TrueNAS management IP differs from the iSCSI data IP. |
+| Target IQN | Optional — leave blank; auto-discovered from existing iSCSI targets. |
 
-> **Security note:** Username/password authentication sends credentials on every API call. API token authentication is preferred and may be required in future TrueNAS releases.
+Authentication is **Bearer token only** — username/password auth was removed in v3.0. If you're still on v2.x, see [Migrating from v2.x](docs/migrating-from-v2.md).
+
+### Securing the API Token (Recommended for Production)
+
+By default the API token is stored in `/etc/pve/storage.cfg`, which is replicated in plaintext across all cluster nodes. For production deployments, move it into a private keyfile that only root can read and that is not replicated:
+
+```bash
+# Run on each Proxmox node — replace 'truenas-vms' with your actual storage ID
+STORAGEID="truenas-vms"
+KEYFILE="/etc/pve/priv/truenas-${STORAGEID}.key"
+
+echo -n "your-api-token-here" > "$KEYFILE"
+chmod 600 "$KEYFILE"
+pvesm set "$STORAGEID" --truenas_api_key ""
+```
+
+The plugin checks `/etc/pve/priv/truenas-<storeid>.key` automatically; if it exists, it's used and `truenas_api_key` in `storage.cfg` is ignored. The keyfile must exist on **every Proxmox node** — `/etc/pve/priv/` is not replicated via pmxcfs, so copy it manually.
 
 ### ZFS Block Size
 
-The **ZFS Blocksize** field controls the `-b` argument passed to `zfs create` when Proxmox provisions a new zvol on TrueNAS. Set this when adding the storage — it cannot be changed afterward without editing the config directly.
+v3.0's storage panel has no blocksize field — newly created zvols inherit the **default volblocksize of the parent pool/dataset** on TrueNAS. If you need a specific block size (e.g. 16k on TrueNAS SCALE, which requires a 16k minimum), set it as the default on the pool or dataset in the TrueNAS UI before creating disks through the plugin; it does not need to be reconfigured in Proxmox.
 
-| TrueNAS Product | Recommended blocksize |
-|:----------------|:----------------------|
-| TrueNAS SCALE (any version) | **16k (16384)** |
-| TrueNAS CORE | **8k (8192)** |
-
-TrueNAS SCALE ships a newer ZFS that requires a minimum block size of 16k. If you leave this at the Proxmox default of 8k on a SCALE system, every disk creation will log:
-
-```
-Warning: volblocksize (8192) is less than the default minimum block size (16384).
-To reduce wasted space a volblocksize of 16384 is recommended.
-```
-
-The disk is created successfully despite this warning, but the suboptimal block size wastes space due to internal ZFS padding on every write.
-
-**Fixing an existing storage entry:**
-
-Edit `/etc/pve/storage.cfg` on any cluster node and change `blocksize 8192` to `blocksize 16384` for your TrueNAS SCALE storage entry. No data migration is needed — only newly created zvols use the updated value. Existing zvols are unaffected.
-
-> **Note:** Automatic blocksize detection based on TrueNAS version is planned for v2.4.0 (see [#241](https://github.com/TheGrandWazoo/truenas-proxmox/issues/241)).
+> This section previously described a Proxmox-side **ZFS Blocksize** field — that field belongs to the legacy v2.x built-in "ZFS over iSCSI" storage type, not the v3 plugin. See [Migrating from v2.x](docs/migrating-from-v2.md) if you're still running v2.x.
 
 ---
 
@@ -358,7 +353,7 @@ There are three distinct layers where errors can appear:
 
 **Layer 1 — Plugin (TrueNAS REST API)**
 
-The plugin called the TrueNAS API and got an error, or the API was unreachable. These errors come from the plugin code and appear in the Proxmox task log with prefixes like `freenas-proxmox:` or `[TrueNAS::]`.
+The plugin called the TrueNAS API and got an error, or the API was unreachable. These errors come from the plugin code. On v3.0, they appear in syslog/journalctl with a `TrueNASPlugin:` prefix (v2.x used `freenas-proxmox:`).
 
 Common causes:
 - Wrong API host IP or hostname
@@ -367,9 +362,9 @@ Common causes:
 - TrueNAS iSCSI service not running
 - TrueNAS API service not reachable from the Proxmox node
 
-Example log line:
+Example log line (v3.0):
 ```
-freenas-proxmox: Unable to connect to the TrueNAS API at '192.168.1.10' using HTTPS (500)
+TrueNASPlugin: Unable to connect to the TrueNAS API at '192.168.1.10' using HTTPS (500)
 ```
 
 **Layer 2 — iSCSI / QEMU data path**
@@ -408,7 +403,7 @@ Common causes:
 
 ---
 
-### After install, the "FreeNAS/TrueNAS API" option is not visible
+### After install, "TrueNAS (ZFS/iSCSI)" is not visible in the Add Storage dropdown
 
 Refresh your browser (force-refresh with Ctrl+Shift+R or Cmd+Shift+R). The Proxmox UI JavaScript is cached aggressively.
 
