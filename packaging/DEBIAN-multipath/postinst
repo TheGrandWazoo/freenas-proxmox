@@ -87,26 +87,38 @@ STANZA
 }
 
 restart_pve_services() {
+    # Bare statements (not `cmd && log ...`) so `set -e` actually aborts on
+    # failure instead of silently skipping past it — see tests/test-restart-services.sh.
     log "Restarting Proxmox VE services ..."
-    pvedaemon restart && log "pvedaemon restarted"
-    pveproxy restart  && log "pveproxy restarted"
+    pvedaemon restart
+    log "pvedaemon restarted"
+    pveproxy restart
+    log "pveproxy restarted"
+    pvestatd restart
+    log "pvestatd restarted"
+    systemctl restart pve-ha-lrm pve-ha-crm
+    log "pve-ha-lrm, pve-ha-crm restarted"
     log "Done. Refresh your Proxmox browser tab."
 }
 
-case "$1" in
-    configure)
-        log "Configuring truenas-proxmox-multipath (previous version: ${2:-none})"
-        install_plugin
-        install_ui
-        install_multipath_conf
-        restart_pve_services
-        ;;
-    abort-upgrade|abort-remove|abort-deconfigure)
-        ;;
-    *)
-        echo "$0: called with unknown argument '$1'" >&2
-        exit 0
-        ;;
-esac
+# Guard so tests can `source` this file (to exercise its functions) without
+# running dpkg's maintainer-script logic below.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    case "$1" in
+        configure)
+            log "Configuring truenas-proxmox-multipath (previous version: ${2:-none})"
+            install_plugin
+            install_ui
+            install_multipath_conf
+            restart_pve_services
+            ;;
+        abort-upgrade|abort-remove|abort-deconfigure)
+            ;;
+        *)
+            echo "$0: called with unknown argument '$1'" >&2
+            exit 0
+            ;;
+    esac
 
-exit 0
+    exit 0
+fi

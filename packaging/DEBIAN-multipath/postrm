@@ -14,41 +14,57 @@ log() {
     echo "[truenas-proxmox-multipath] $*" | tee -a "$LOG_FILE"
 }
 
-case "$1" in
-    remove|purge)
-        if [ -f "$PLUGIN_DST" ]; then
-            log "Removing ${PLUGIN_DST}"
-            rm -f "$PLUGIN_DST"
-        fi
+restart_pve_services() {
+    # Bare statements (not `cmd && log ...`) so `set -e` actually aborts on
+    # failure instead of silently skipping past it — see tests/test-restart-services.sh.
+    log "Restarting Proxmox VE services ..."
+    pvedaemon restart
+    log "pvedaemon restarted"
+    pveproxy restart
+    log "pveproxy restarted"
+    pvestatd restart
+    log "pvestatd restarted"
+    systemctl restart pve-ha-lrm pve-ha-crm
+    log "pve-ha-lrm, pve-ha-crm restarted"
+}
 
-        if [ -f "$JS_DST" ]; then
-            log "Removing ${JS_DST}"
-            rm -f "$JS_DST"
-        fi
+# Guard so tests can `source` this file (to exercise its functions) without
+# running dpkg's maintainer-script logic below.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    case "$1" in
+        remove|purge)
+            if [ -f "$PLUGIN_DST" ]; then
+                log "Removing ${PLUGIN_DST}"
+                rm -f "$PLUGIN_DST"
+            fi
 
-        if [ -f "$TPL" ] && grep -qF 'truenas-multipath.js' "$TPL" 2>/dev/null; then
-            log "Removing <script> tag from ${TPL}"
-            sed -i '/truenas-multipath\.js/d' "$TPL"
-        fi
+            if [ -f "$JS_DST" ]; then
+                log "Removing ${JS_DST}"
+                rm -f "$JS_DST"
+            fi
 
-        if [ -f "$MULTIPATH_CONF" ] && grep -qF "$BLOCK_BEGIN" "$MULTIPATH_CONF"; then
-            log "Removing TrueNAS stanza from ${MULTIPATH_CONF}"
-            perl -i -0777 -pe \
-                "s|\n?\Q${BLOCK_BEGIN}\E.*?\Q${BLOCK_END}\E\n?||s" \
-                "$MULTIPATH_CONF"
-        fi
+            if [ -f "$TPL" ] && grep -qF 'truenas-multipath.js' "$TPL" 2>/dev/null; then
+                log "Removing <script> tag from ${TPL}"
+                sed -i '/truenas-multipath\.js/d' "$TPL"
+            fi
 
-        log "Restarting Proxmox VE services ..."
-        if pvedaemon restart 2>/dev/null; then log "pvedaemon restarted"; fi
-        if pveproxy  restart 2>/dev/null; then log "pveproxy restarted";  fi
-        log "Done."
-        ;;
-    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
-        ;;
-    *)
-        echo "$0: called with unknown argument '$1'" >&2
-        exit 0
-        ;;
-esac
+            if [ -f "$MULTIPATH_CONF" ] && grep -qF "$BLOCK_BEGIN" "$MULTIPATH_CONF"; then
+                log "Removing TrueNAS stanza from ${MULTIPATH_CONF}"
+                perl -i -0777 -pe \
+                    "s|\n?\Q${BLOCK_BEGIN}\E.*?\Q${BLOCK_END}\E\n?||s" \
+                    "$MULTIPATH_CONF"
+            fi
 
-exit 0
+            restart_pve_services
+            log "Done."
+            ;;
+        upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+            ;;
+        *)
+            echo "$0: called with unknown argument '$1'" >&2
+            exit 0
+            ;;
+    esac
+
+    exit 0
+fi

@@ -44,6 +44,8 @@ run_case() {
 
 run_case "${REPO_ROOT}/packaging/DEBIAN/postinst" "postinst"
 run_case "${REPO_ROOT}/packaging/DEBIAN/postrm"   "postrm"
+run_case "${REPO_ROOT}/packaging/DEBIAN-multipath/postinst" "multipath postinst"
+run_case "${REPO_ROOT}/packaging/DEBIAN-multipath/postrm"   "multipath postrm"
 
 # Failure-propagation check: a failing restart must abort the function (and
 # thus the maintainer script under `set -e`), not be silently swallowed.
@@ -80,5 +82,7 @@ run_failure_case() {
 
 run_failure_case "${REPO_ROOT}/packaging/DEBIAN/postinst" "postinst"
 run_failure_case "${REPO_ROOT}/packaging/DEBIAN/postrm"   "postrm"
+run_failure_case "${REPO_ROOT}/packaging/DEBIAN-multipath/postinst" "multipath postinst"
+run_failure_case "${REPO_ROOT}/packaging/DEBIAN-multipath/postrm"   "multipath postrm"
 
 echo "All restart_pve_services() tests passed."
