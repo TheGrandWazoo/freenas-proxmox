@@ -1,13 +1,13 @@
 Package: freenas-proxmox
-Version: 3.2.4~beta+eadf692
+Version: 3.2.4~beta+58be143
 Architecture: all
 Maintainer: KSA Technologies, LLC <theprofessor@ksatechnologies.com>
 Depends: truenas-proxmox (>= 3.0.0)
-Filename: pool/testing/freenas-proxmox_3.2.4~beta+eadf692_all.deb
+Filename: pool/testing/freenas-proxmox_3.2.4~beta+58be143_all.deb
 Size: 1662
-MD5sum: 6b5b577fe09487ce6cccb1419039cacf
-SHA1: 929cffe563de40abbef7a9a4725d8c9e00f20c12
-SHA256: b46292fc94b396cc2672aaa16f7fb53f2ad71b335f1c8f49532c5fcb21bab0d4
+MD5sum: e2c1d9a000dfa95ea4251b403c129fc8
+SHA1: a43a09e6af0c924c070c0d433c192cdba02d7389
+SHA256: 16521034d3b1b8f893c399c2a13b56229b64be781394a6287fb62dd79b2416a4
 Section: perl
 Priority: optional
 Homepage: https://github.com/TheGrandWazoo/truenas-proxmox
@@ -21,17 +21,17 @@ Description: Transitional package — replaced by truenas-proxmox
  The freenas-proxmox package name will not exist in v4.0.
 
 Package: truenas-proxmox
-Version: 3.2.4~beta+eadf692
+Version: 3.2.4~beta+58be143
 Architecture: all
 Maintainer: KSA Technologies, LLC <theprofessor@ksatechnologies.com>
 Depends: librest-client-perl, open-iscsi
 Breaks: freenas-proxmox (<< 3.0.0)
 Replaces: freenas-proxmox
-Filename: pool/testing/truenas-proxmox_3.2.4~beta+eadf692_all.deb
-Size: 17044
-MD5sum: 1fbaefb85e7361fb3633a51dee6ed334
-SHA1: 48c97c2bf0692fb25f5312631e0c934fe3de194d
-SHA256: ef1e2622e0e24dceb7f56c69494e7b7bb08313645879414b3b3e1f355240d40a
+Filename: pool/testing/truenas-proxmox_3.2.4~beta+58be143_all.deb
+Size: 17240
+MD5sum: 612a227fa0b6ee9814a7d75884e68470
+SHA1: 1bc435747ecee26594ad28a91aec602c2defebb3
+SHA256: 7c34794af00fae5e872acc5b18a98bb817db5a43cfee21db1f7b850503b07f66
 Section: perl
 Priority: optional
 Homepage: https://github.com/TheGrandWazoo/truenas-proxmox
