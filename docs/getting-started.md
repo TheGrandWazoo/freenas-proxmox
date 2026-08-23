@@ -97,11 +97,27 @@ curl -fsSL https://thegrandwazoo.github.io/freenas-proxmox/public.gpg.key \
 
 ### Step 2 — Add the Package Repository
 
+**PVE 9 / Debian trixie (recommended — deb822 format):**
+
+```bash
+cat << 'SOURCES' | tee /etc/apt/sources.list.d/truenas-proxmox.sources
+Types: deb
+URIs: https://thegrandwazoo.github.io/freenas-proxmox
+Suites: v3
+Components: main
+Signed-By: /etc/apt/keyrings/truenas-proxmox.gpg
+SOURCES
+```
+
+**PVE 8 / Debian bookworm (one-liner `.list` format):**
+
 ```bash
 echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
 https://thegrandwazoo.github.io/freenas-proxmox v3 main" \
   | tee /etc/apt/sources.list.d/truenas-proxmox.list
 ```
+
+Both formats resolve to the same packages — pick whichever matches your Proxmox VE version. Do not add both; apt would see the repository twice.
 
 ### Step 3 — Install the Package
 

@@ -126,14 +126,29 @@ curl -fsSL https://thegrandwazoo.github.io/freenas-proxmox/public.gpg.key \
   | gpg --dearmor \
   | sudo tee /etc/apt/keyrings/truenas-proxmox.gpg > /dev/null
 
-# Add the v3 repository track
-echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
-https://thegrandwazoo.github.io/freenas-proxmox v3 main" \
-  | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
+# Add the v3 repository track (deb822 format — recommended for PVE 9 / Debian trixie)
+cat << 'SOURCES' | sudo tee /etc/apt/sources.list.d/truenas-proxmox.sources
+Types: deb
+URIs: https://thegrandwazoo.github.io/freenas-proxmox
+Suites: v3
+Components: main
+Signed-By: /etc/apt/keyrings/truenas-proxmox.gpg
+SOURCES
 
 # Install
 sudo apt update && sudo apt install truenas-proxmox
 ```
+
+<details>
+<summary>PVE 8 / Debian bookworm — one-liner <code>.list</code> format</summary>
+
+```bash
+echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
+https://thegrandwazoo.github.io/freenas-proxmox v3 main" \
+  | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
+```
+
+</details>
 
 `apt upgrade` will deliver v3.x point releases automatically. You will never be
 automatically promoted to a future v4 — that requires changing the dist track in
@@ -165,13 +180,28 @@ curl -fsSL https://thegrandwazoo.github.io/freenas-proxmox/public.gpg.key \
   | gpg --dearmor \
   | sudo tee /etc/apt/keyrings/truenas-proxmox.gpg > /dev/null
 
-# Add the v2 repository track
-echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
-https://thegrandwazoo.github.io/freenas-proxmox main main" \
-  | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
+# Add the v2 repository track (deb822 format — recommended for PVE 9 / Debian trixie)
+cat << 'SOURCES' | sudo tee /etc/apt/sources.list.d/truenas-proxmox.sources
+Types: deb
+URIs: https://thegrandwazoo.github.io/freenas-proxmox
+Suites: main
+Components: main
+Signed-By: /etc/apt/keyrings/truenas-proxmox.gpg
+SOURCES
 
 sudo apt update
 ```
+
+<details>
+<summary>PVE 8 / Debian bookworm — one-liner <code>.list</code> format</summary>
+
+```bash
+echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
+https://thegrandwazoo.github.io/freenas-proxmox main main" \
+  | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
+```
+
+</details>
 
 ### Migrating from Cloudsmith
 
@@ -191,13 +221,28 @@ curl -fsSL https://thegrandwazoo.github.io/freenas-proxmox/public.gpg.key \
   | gpg --dearmor \
   | sudo tee /etc/apt/keyrings/truenas-proxmox.gpg > /dev/null
 
-# Point to the v3 dist track
-echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
-https://thegrandwazoo.github.io/freenas-proxmox v3 main" \
-  | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
+# Point to the v3 dist track (deb822 format — recommended for PVE 9 / Debian trixie)
+cat << 'SOURCES' | sudo tee /etc/apt/sources.list.d/truenas-proxmox.sources
+Types: deb
+URIs: https://thegrandwazoo.github.io/freenas-proxmox
+Suites: v3
+Components: main
+Signed-By: /etc/apt/keyrings/truenas-proxmox.gpg
+SOURCES
 
 sudo apt update
 ```
+
+<details>
+<summary>PVE 8 / Debian bookworm — one-liner <code>.list</code> format</summary>
+
+```bash
+echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
+https://thegrandwazoo.github.io/freenas-proxmox v3 main" \
+  | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
+```
+
+</details>
 
 **On v2.x (Cloudsmith stable) — staying on v2:**
 
@@ -211,13 +256,28 @@ curl -fsSL https://thegrandwazoo.github.io/freenas-proxmox/public.gpg.key \
   | gpg --dearmor \
   | sudo tee /etc/apt/keyrings/truenas-proxmox.gpg > /dev/null
 
-# Point to the v2 dist track (v2.x only — you will never receive a v3 package)
-echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
-https://thegrandwazoo.github.io/freenas-proxmox main main" \
-  | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
+# Point to the v2 dist track (deb822 format — recommended for PVE 9 / Debian trixie; v2.x only, you will never receive a v3 package)
+cat << 'SOURCES' | sudo tee /etc/apt/sources.list.d/truenas-proxmox.sources
+Types: deb
+URIs: https://thegrandwazoo.github.io/freenas-proxmox
+Suites: main
+Components: main
+Signed-By: /etc/apt/keyrings/truenas-proxmox.gpg
+SOURCES
 
 sudo apt update
 ```
+
+<details>
+<summary>PVE 8 / Debian bookworm — one-liner <code>.list</code> format</summary>
+
+```bash
+echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
+https://thegrandwazoo.github.io/freenas-proxmox main main" \
+  | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
+```
+
+</details>
 
 For a full upgrade path matrix — including what to do when v4 ships — see [docs/upgrade-paths.md](docs/upgrade-paths.md).
 
@@ -234,15 +294,30 @@ curl -fsSL https://thegrandwazoo.github.io/freenas-proxmox/public.gpg.key \
   | gpg --dearmor \
   | sudo tee /etc/apt/keyrings/truenas-proxmox.gpg > /dev/null
 
-# Add the testing dist track
-echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
-https://thegrandwazoo.github.io/freenas-proxmox testing main" \
-  | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
+# Add the testing dist track (deb822 format — recommended for PVE 9 / Debian trixie)
+cat << 'SOURCES' | sudo tee /etc/apt/sources.list.d/truenas-proxmox.sources
+Types: deb
+URIs: https://thegrandwazoo.github.io/freenas-proxmox
+Suites: testing
+Components: main
+Signed-By: /etc/apt/keyrings/truenas-proxmox.gpg
+SOURCES
 
 sudo apt update && sudo apt install truenas-proxmox
 ```
 
-To switch back to stable, replace `testing` with `v3` in your sources.list and run `apt update`.
+<details>
+<summary>PVE 8 / Debian bookworm — one-liner <code>.list</code> format</summary>
+
+```bash
+echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
+https://thegrandwazoo.github.io/freenas-proxmox testing main" \
+  | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
+```
+
+</details>
+
+To switch back to stable, replace `Suites: testing` with `Suites: v3` in `truenas-proxmox.sources` (or `testing` with `v3` in `truenas-proxmox.list` if using the one-liner format) and run `apt update`.
 
 ---
 

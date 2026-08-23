@@ -77,15 +77,33 @@ When v4.0 ships, this section will be updated with:
 - Step-by-step migration from v3.x
 - Step-by-step migration from v2.x (if a direct v2→v4 path is supported)
 
-**To receive v4.x packages when they ship**, you will need to change your `sources.list` dist track from `v3` to `v4`:
+**To receive v4.x packages when they ship**, you will need to change your dist track from `v3` to `v4`:
 
 ```bash
 # When v4.0 is released — do NOT run this until the v4 migration guide is published
+
+# deb822 format (recommended — PVE 9 / Debian trixie)
+cat << 'SOURCES' | sudo tee /etc/apt/sources.list.d/truenas-proxmox.sources
+Types: deb
+URIs: https://thegrandwazoo.github.io/freenas-proxmox
+Suites: v4
+Components: main
+Signed-By: /etc/apt/keyrings/truenas-proxmox.gpg
+SOURCES
+sudo apt update
+```
+
+<details>
+<summary>PVE 8 / Debian bookworm — one-liner <code>.list</code> format</summary>
+
+```bash
 echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
 https://thegrandwazoo.github.io/freenas-proxmox v4 main" \
   | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
 sudo apt update
 ```
+
+</details>
 
 `apt upgrade` on the `v3` dist track will never pull in a v4 package — you must explicitly change the dist track. This is intentional.
 
