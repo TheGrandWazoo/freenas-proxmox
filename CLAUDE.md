@@ -62,13 +62,11 @@ v3.0 uses the TrueNAS v2.0 REST API exclusively. Supported:
 
 ## Known Issues / Active Work
 
-- **#228** — v2.x→v3.0 migration: "Move Disk" confirmed working; in-place zvol rename script TBD
-- **#234** — Snapshot interface (PVE 9+): not started
-- **#243** — WebSocket API (SCALE 25.04+): future
-- **#249** — Per-variant dispatch: deferred to v3.1+
-- **#250** — alloc_image partial-failure rollback: narrow edge case, open
-- **#256** — Multipath support: deferred (no test hardware)
-- **#260** — TPM state disks incompatible with `iscsi://` paths: known limitation, store TPM state on local-lvm or NFS
+- **#243** — WebSocket API (SCALE 25.04+): open, deferred to v4.0.0 (Rivendell) — required before TrueNAS SCALE 26.x removes the REST API entirely
+- **#249** — Per-variant dispatch (`TrueNAS-Core.pm`/`TrueNAS-Scale.pm`): open, deferred — re-evaluate only if `TrueNAS.pm` passes 800 lines or a new CORE/SCALE divergence forces `if`/`else` branching
+- **#260** — TPM state disks (`tpmstate0`) incompatible with `iscsi://` paths: permanent known limitation (not a bug) — store TPM state on `local-lvm` or NFS
+
+Resolved since last update: #228 (v2.x→v3.0 migration via Move Disk), #234 (snapshot interface, shipped v3.1.0), #250 (`alloc_image` partial-failure rollback), #256 (multipath support, shipped v3.2.0 as the separate `truenas-proxmox-multipath` package).
 
 ## Key Perl Module
 
