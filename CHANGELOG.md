@@ -8,10 +8,14 @@ See each [GitHub Release](https://github.com/TheGrandWazoo/truenas-proxmox/relea
 
 ---
 
-## [Unreleased]
+## [3.2.5] — 2026-08-23
+
+### Fixed
+- HA-managed VMs on `truenas-multipath` storage could fail to start after installing or upgrading `truenas-proxmox-multipath` — its postinst/postrm had the same gap #179 fixed in the main package: only `pvedaemon`/`pveproxy` were restarted, never `pvestatd`/`pve-ha-lrm`/`pve-ha-crm`. Verified live on pve01/02/03-hq — all five daemons now restart cleanly on install (#287)
 
 ### Documentation
 - README, getting-started.md, and the in-UI help panel updated for TrueNAS SCALE 25.04's UI changes (API key screen moved, standalone portal/initiator-group screen replaced by the iSCSI Share wizard) and to match the actual v3 storage panel fields, which had drifted from the v2.x field set still described in the docs (#286)
+- deb822 (`.sources`) format added as the primary apt install instructions for PVE 9 / Debian trixie, across README, getting-started.md, and upgrade-paths.md; the one-liner `.list` format is kept as a fallback for PVE 8 / bookworm (#285)
 
 ---
 
