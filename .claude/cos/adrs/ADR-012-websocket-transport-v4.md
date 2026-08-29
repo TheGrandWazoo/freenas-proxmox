@@ -1,7 +1,7 @@
 # ADR-012: WebSocket JSON-RPC 2.0 Transport for v4.0.0 (Rivendell)
 
 **Date**: 2026-08-29
-**Status**: Draft — design questions decided, pending live-lab protocol verification before Accepted
+**Status**: Draft — design decided and live-verified against `.92`; pending Kevin's sign-off to mark Accepted
 **Deciders**: Kevin Adams
 
 ## Context
@@ -39,13 +39,23 @@ only across the handful of calls within one.
 - **Endpoint**: `wss://<host>/api/current` (or pin a version: `/api/v25.04`).
   Plain `ws://` works but the server **auto-revokes any API key submitted over
   it** — TLS is mandatory in practice, same posture as today's REST/HTTPS.
-- **Auth**: `auth.login_ex` with `mechanism: "API_KEY_PLAIN"` is the
-  forward-compatible call for a plugin scoped at SCALE 25.04+. The older
-  `auth.login_with_api_key` still works but is deprecated in TrueNAS 26 and
-  slated for removal in 27 — not worth building against for a v4.0 plugin.
-  **Unconfirmed**: the exact full request/response JSON body for `login_ex`
-  couldn't be pulled from a rendered doc page — verify against a live
-  Fangtooth/Goldeneye box (`.91`/`.92`) or `core.get_methods` before coding.
+- **Auth — CONFIRMED live against `.92` (TrueNAS-25.10.3.1) 2026-08-29**:
+  `auth.login_ex` with `mechanism: "API_KEY_PLAIN"` **requires** a `username`
+  field (server-side Pydantic validation rejects its absence: `"Field
+  required"`), but this plugin doesn't currently ask users for a TrueNAS
+  username anywhere in `storage.cfg` — only an API key. Tried `username:
+  "root"` and got `{"response_type":"AUTH_ERR"}` back (a JSON-RPC-level
+  *success* envelope whose payload signals auth failure — not a JSON-RPC
+  `error`, a real protocol gotcha worth remembering). The legacy
+  **`auth.login_with_api_key`** (single positional `[api_key]` param, no
+  username needed) authenticated immediately and correctly. It's deprecated in
+  TrueNAS 26 and slated for removal in 27, but is proven working today, matches
+  this plugin's existing "just an API key" config model, and is what
+  `boomshankerx`'s independent implementation and the `acme.sh` deploy hook
+  both use in practice. **Recommendation: build against `auth.login_with_api_key`
+  for the initial v4.0.0 cut**, and revisit `login_ex` only if/when there's a
+  clean way to resolve which username a given API key is scoped to (TrueNAS's
+  own UI shows this per-key, but no query method for it was found here).
 - **Envelope**: vanilla JSON-RPC 2.0 — `{"jsonrpc":"2.0","id":N,"method":...,
   "params":[...]}`, response `{"id":N,"result":...}` or
   `{"id":N,"error":{"code":...,"message":...}}`. No batching. `id`-based
@@ -54,9 +64,10 @@ only across the handful of calls within one.
   the limit — our per-invocation call pattern is low-concurrency enough that
   this shouldn't bite us, but the client needs to handle the error rather than
   assume it can't happen.
-- **Method mapping** (all 8 of our endpoint families, all confirmed
-  **synchronous, non-job** calls — no job-polling logic needed for anything we
-  use today):
+- **Method mapping — CONFIRMED live against `.92` (TrueNAS-25.10.3.1) 2026-08-29**,
+  all 8 endpoint families, all synchronous/non-job calls (no job-polling logic
+  needed for anything this plugin does today). Every call below returned real
+  data with no errors using `scripts/truenas-ws-diag.pl`:
 
   | REST (current) | JSON-RPC method |
   |---|---|
@@ -76,12 +87,15 @@ only across the handful of calls within one.
 - **Keepalive**: `core.ping` exists; exact server timeout unconfirmed — client
   should use a conservative, configurable interval rather than assuming a
   specific value.
-- **Known live bug**: TrueNAS Jira **NAS-135643** — `iscsi.target.query` over
-  JSON-RPC on SCALE 25.04.0 threw a server-side `AttributeError` in the
-  version-adapter layer, reported by someone building a similar ZFS-over-iSCSI
-  plugin. Did not reproduce on 24.10.2.1. **Must be verified against our own
-  Fangtooth (25.04) lab node before this ADR is accepted** — `iscsi.target.query`
-  is load-bearing for nearly every operation this plugin does.
+- **Known live bug, NAS-135643 — does not reproduce on `.92` (TrueNAS-25.10.3.1)
+  2026-08-29**: TrueNAS Jira NAS-135643 documented `iscsi.target.query` over
+  JSON-RPC throwing a server-side `AttributeError` in the version-adapter layer
+  on SCALE 25.04.0 (didn't reproduce on 24.10.2.1 either). Tested live against
+  `.92` and `iscsi.target.query` returned clean data (1 item) — TrueNAS appears
+  to have fixed this between 25.04.0 and 25.10.3.1. **Still worth a quick check
+  against `.91` once it actually hits Fangtooth (25.04)** — the original bug
+  report was specifically against `.0`, and `.91` may land on a patched 25.04.x
+  point release rather than `.04.0` exactly, which would also clear this.
 - No official/upstream Perl implementation exists. `truenas/api_client`
   (Python, official, not on PyPI) and `truenas/truenas_jsonrpc` (protocol spec,
   language-agnostic, in `ARCHITECTURE.md`) are the best official reference
@@ -173,24 +187,58 @@ shape that it's fair to call it a clean break rather than an incremental step.
 Both are speculative future-version ideas, not commitments — revisit once
 v4.0.0's WebSocket transport is actually shipped.
 
+## Live verification (2026-08-29, against `.92` / TrueNAS-25.10.3.1)
+
+Built `scripts/truenas-ws-diag.pl` — a standalone, read-only diagnostic (not part
+of the packaged plugin) that connects via `AnyEvent::WebSocket::Client`,
+authenticates, and exercises every method in the mapping table above. Ran it from
+pve01-hq against `.92` (192.168.69.92, confirmed via REST `system.version` to be
+`TrueNAS-25.10.3.1`, product type `COMMUNITY_EDITION`, using the API key already
+configured for the `TrueNAS-Scale2504-Multipath` storage). Results:
+
+- **Auth resolved**: see the Auth bullet above — `auth.login_with_api_key` works,
+  `auth.login_ex` needs a username this plugin doesn't have. Also hit a real Perl
+  gotcha worth documenting for implementation: `JSON`'s `decode_json` turns a
+  JSON `true`/`false` into a blessed `JSON::PP::Boolean` object, not a plain
+  `1`/`0` — `ref()` on it is truthy, so a naive `!ref($x) || ...` truthiness
+  check will try to hash-dereference it and die. Check `ref($x) eq 'HASH'`
+  explicitly before assuming a non-hash result is a plain scalar.
+- **Every method-mapping call succeeded** — `iscsi.global.config`,
+  `iscsi.portal.query`, `iscsi.target.query`, `iscsi.extent.query`,
+  `iscsi.targetextent.query`, `pool.dataset.query`, `zfs.snapshot.query`,
+  `core.ping` all returned clean data with real values, no method-not-found or
+  schema errors.
+- **NAS-135643 does not reproduce** on 25.10.3.1 (see bullet above) — no longer
+  a hard blocker, though still worth a quick recheck once `.91` actually lands
+  on Fangtooth (25.04.x).
+
+This resolves nearly all of the "unconfirmed, verify against live lab" items this
+ADR originally flagged. What's left for `.91` specifically as it moves through
+versions ([[project_truenas_lab_versions]]): confirm the same method mapping and
+NAS-135643 status hold on 25.04.x (Fangtooth) and on whatever 24.10.x currently
+runs — SCALE below 25.04 predates the JSON-RPC 2.0 migration entirely (it used a
+legacy DDP-based websocket protocol), so `.91` pre-Fangtooth is expected to fail
+this diagnostic outright, which is itself a useful confirmation of the version
+cutoff `iscsi.global.config` etc. depend on.
+
 ## Consequences
 
 - `libanyevent-websocket-client-perl` (pulls in `libanyevent-perl`) becomes a new
   package dependency in `packaging/DEBIAN/control.j2` for the v4 dist track only
   (v3.x stays REST-only, per ADR-009's version matrix — this is a `v4`-dist
   concern, doesn't affect existing stable users).
-- Auth call shape (`auth.login_ex`/`login_with_api_key`), the full method-mapping
-  table, and the NAS-135643 bug all still need direct verification against the
-  lab's Fangtooth/Goldeneye nodes (`.91`/`.92`, [[project_truenas_lab_versions]])
-  before implementation starts in earnest — several protocol details above are
-  sourced from docs/forums/a third party's implementation, not yet confirmed
-  against a live TrueNAS instance from this codebase.
+- Auth implementation should target `auth.login_with_api_key`, not `auth.login_ex`
+  — confirmed live, see above. No plugin config changes needed (still just an API
+  key, same as REST today).
 - No job-polling logic is needed for v4.0.0's initial scope (all 8 endpoint
-  families are synchronous per-the-docs) — keeps the first implementation
-  smaller than originally feared.
+  families are synchronous, confirmed both by docs and live testing).
 - `truenas_ssl_verify => 0` behavior (self-signed cert support) carries over
   unchanged — `AnyEvent::WebSocket::Client` supports disabling cert verification
-  the same way the current `LWP::UserAgent` path does.
+  the same way the current `LWP::UserAgent` path does (used as `ssl_no_verify`
+  in the diagnostic script, same live test).
+- Watch for the `JSON::PP::Boolean` truthiness gotcha (above) when writing the
+  real `_api_ws()` implementation — a boolean JSON-RPC result is common (e.g.
+  `pool.dataset.delete` returns one) and needs `ref() eq 'HASH'` guarding.
 - #249 (per-variant dispatch) stays deferred past v4.0.0 — tracked as possible
   v4.1/v5.0 scope, see Question 2 above.
 
@@ -202,6 +250,7 @@ v4.0.0's WebSocket transport is actually shipped.
 - #205 (original 2025-04-20 bug report; the `boomshankerx`/`mir07` design
   discussion that produced the prior art above)
 - [[project_truenas_lab_versions]] (test lab plan for verifying the unconfirmed items above)
+- `scripts/truenas-ws-diag.pl` (this repo — the read-only diagnostic tool used for the 2026-08-29 live verification above)
 - `truenas/truenas_jsonrpc` (protocol spec) and `truenas/api_client` (Python reference client) on GitHub
 - [boomshankerx/proxmox-truenas](https://github.com/boomshankerx/proxmox-truenas) (independent AGPL-3.0 successor project, reference only — see Prior Art above)
 - TrueNAS Jira NAS-135643 (live 25.04.0 bug in `iscsi.target.query` over JSON-RPC)
