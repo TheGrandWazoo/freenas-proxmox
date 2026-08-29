@@ -30,3 +30,8 @@ ADRs document significant decisions made about this project. They follow an RFC-
 | [ADR-005](ADR-005-bearer-token-authentication.md) | Bearer Token Authentication as Primary Auth Method | Accepted |
 | [ADR-006](ADR-006-versioning-strategy.md) | Package Versioning Strategy | Accepted |
 | [ADR-007](ADR-007-freenas-vs-truenas-naming.md) | FreeNAS vs TrueNAS Module Naming | Accepted |
+| [ADR-008](ADR-008-pve-version-support-matrix.md) | PVE Version Support Matrix | Superseded by ADR-009 |
+| [ADR-009](ADR-009-pve-version-support-v3.md) | PVE Version Support Matrix — v3.x and v4.0 Versioning Strategy | Accepted |
+| [ADR-010](ADR-010-apt-dist-tracks.md) | APT Repository Dist Tracks — Per-Major-Version Isolation | Accepted |
+| [ADR-011](ADR-011-apt-components-optional-features.md) | APT Components for Optional Feature Packages | Accepted |
+| [ADR-012](ADR-012-websocket-transport-v4.md) | WebSocket JSON-RPC 2.0 Transport for v4.0.0 (Rivendell) | Draft |
