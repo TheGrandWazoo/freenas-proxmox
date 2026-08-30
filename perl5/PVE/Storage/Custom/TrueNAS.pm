@@ -2,12 +2,27 @@ package PVE::Storage::Custom::TrueNAS;
 
 # TrueNAS Custom Storage Plugin for Proxmox VE
 #
-# Manages ZFS volumes over iSCSI via the TrueNAS REST API.
-# Discovered automatically by PVE — no patches to system files required.
+# Manages ZFS volumes over iSCSI via the TrueNAS API — REST v2.0 (TrueNAS
+# CORE, TrueNAS SCALE < 25.04) or WebSocket JSON-RPC 2.0 (TrueNAS SCALE >=
+# 25.04, where REST is deprecated and is removed entirely in SCALE 26.x).
+# Transport is auto-detected per host (see _transport()) — storage.cfg is
+# unchanged either way. Discovered automatically by PVE — no patches to
+# system files required. See ADR-012 for the WebSocket transport design.
 #
-# Supports: TrueNAS CORE 13.x, TrueNAS SCALE <= 24.10 (REST API v2.0)
-# Auth:     Bearer token (API key) only — basic auth removed in v3.0
+# Supports: TrueNAS CORE 13.x, TrueNAS SCALE 24.10+ (both transports)
+# Auth:     Bearer token (API key) only — basic auth removed in v3.0.
+#           WebSocket auth uses auth.login_with_api_key specifically, not the
+#           newer auth.login_ex — the latter requires a username field this
+#           plugin has no way to know for an arbitrary API key (ADR-012).
 # iSCSI:    QEMU libiscsi (iscsi:// paths) — no iscsiadm session management
+#
+# WARNING: the WebSocket transport (_api_ws, _ws_connect, _ws_call) has been
+# live-verified for every *read* (query) call this plugin makes (ADR-012,
+# four runs across three TrueNAS SCALE versions incl. 25.04.2.6). The
+# *write* path (create/delete/update param shapes below) follows TrueNAS's
+# documented CRUDService conventions but has NOT yet been independently
+# live-tested against a real host — verify against .91/.92 before trusting
+# alloc_image/free_image/snapshot operations in production on SCALE 25.04+.
 #
 # Per-VM target architecture:
 #   Each VM gets its own iSCSI target (proxmox-vm-<vmid>).
@@ -19,17 +34,19 @@ package PVE::Storage::Custom::TrueNAS;
 use strict;
 use warnings;
 
-use JSON            qw(encode_json decode_json);
-use LWP::UserAgent  ();
-use HTTP::Request   ();
-use URI::Escape     qw(uri_escape);
-use Sys::Syslog     qw(syslog);
+use JSON                         qw(encode_json decode_json);
+use LWP::UserAgent               ();
+use HTTP::Request                ();
+use URI::Escape                  qw(uri_escape uri_unescape);
+use Sys::Syslog                  qw(syslog);
+use AnyEvent                     ();
+use AnyEvent::WebSocket::Client  ();
 
 use PVE::Storage::Plugin;
 
 use base qw(PVE::Storage::Plugin);
 
-our $VERSION = '3.2.5';
+our $VERSION = '4.0.0';
 
 # Per-host runtime state cache
 my $state = {};
@@ -162,10 +179,53 @@ sub _resolve_token {
     return;
 }
 
+# Dispatches to the REST or WebSocket transport based on the detected
+# TrueNAS variant/version (see _transport). Every call site in this file
+# uses the REST-style (method, path, data) signature regardless of which
+# transport actually ends up handling it — _api_ws() translates that
+# signature onto the equivalent JSON-RPC 2.0 method. See ADR-012.
+sub _api {
+    my ($scfg, $method, $path, $data) = @_;
+    return _transport($scfg) eq 'ws'
+        ? _api_ws($scfg, $method, $path, $data)
+        : _api_rest($scfg, $method, $path, $data);
+}
+
+# Detects which transport to use for $scfg->{truenas_host}: REST v2.0 for
+# TrueNAS CORE and SCALE < 25.04, WebSocket JSON-RPC 2.0 for SCALE >= 25.04
+# (where REST is deprecated, and removed entirely in SCALE 26.x). Detection
+# itself always uses REST — it remains available for this purpose on every
+# currently-supported version — and is cached per host so it only runs once
+# per plugin invocation.
+#
+# Distinguishes CORE from SCALE by version-string magnitude, not the
+# /system/product_type endpoint — that field returns the license tier
+# (e.g. "COMMUNITY_EDITION"), not the product family, so it can't be used
+# for this. SCALE uses calendar versioning (YY.MM[.patch], e.g. 25.04.2.6);
+# CORE has only ever used a small integer major (11.x-13.x) and is now
+# maintenance-only, so a YY-style major of 24+ is unambiguously SCALE.
+sub _transport {
+    my ($scfg) = @_;
+    my $host = $scfg->{truenas_host};
+    return $state->{$host}{transport} if $state->{$host}{transport};
+
+    my $version = eval { _api_rest($scfg, 'GET', '/system/version') } // '';
+
+    my $transport = 'rest';
+    if ($version =~ /^TrueNAS-(\d+)\.(\d+)/ && $1 >= 24) {
+        my ($maj, $min) = ($1, $2);
+        $transport = 'ws' if $maj > 25 || ($maj == 25 && $min >= 4);
+    }
+
+    $state->{$host}{transport} = $transport;
+    _log('info', "$host: detected version=$version -> $transport transport");
+    return $transport;
+}
+
 # Make a TrueNAS REST API v2.0 call.
 # Dies with a descriptive message on HTTP error.
 # Returns decoded JSON hashref/arrayref, or undef for empty 204 responses.
-sub _api {
+sub _api_rest {
     my ($scfg, $method, $path, $data) = @_;
 
     my $host  = $scfg->{truenas_host};
@@ -212,6 +272,237 @@ sub _api {
     my $content = $res->content // '';
     return unless length($content);
     return decode_json($content);
+}
+
+# ── Private: WebSocket JSON-RPC 2.0 transport (TrueNAS SCALE 25.04+) ─────────
+#
+# See ADR-012 for the full design and live-verification history. Summary:
+# - AnyEvent::WebSocket::Client, used in blocking style (condvar ->recv) to
+#   match this plugin's existing per-invocation synchronous lifecycle — no
+#   persistent event loop needed, same as the LWP::UserAgent path above.
+# - Auth is auth.login_with_api_key (single positional [api_key] param) —
+#   NOT auth.login_ex, which requires a username field this plugin has no
+#   way to know for an arbitrary API key.
+# - decode_json turns JSON true/false into a blessed JSON::PP::Boolean
+#   object, not a plain 1/0 — ref() on it is truthy. Never assume a non-hash
+#   JSON-RPC result is a plain scalar without checking ref() eq 'HASH' first.
+
+# Opens (and caches) an authenticated WebSocket connection for $scfg's host.
+sub _ws_connect {
+    my ($scfg) = @_;
+    my $host = $scfg->{truenas_host};
+    return $state->{$host}{ws} if $state->{$host}{ws};
+
+    my $token = $state->{$host}{api_token}
+        or die "TrueNAS API token not resolved for '$host'\n";
+
+    my $url    = "wss://$host/api/current";
+    my $client = AnyEvent::WebSocket::Client->new(
+        ssl_no_verify => ($scfg->{truenas_ssl_verify} // 0) ? 0 : 1,
+        timeout       => 30,
+    );
+
+    my $conn = eval { $client->connect($url)->recv };
+    die "TrueNAS WebSocket connect to $host failed: $@" if $@;
+
+    $state->{$host}{ws} = {
+        conn    => $conn,
+        pending => {},
+        next_id => 1,
+    };
+
+    $conn->on(each_message => sub {
+        my (undef, $message) = @_;
+        my $body = eval { decode_json($message->body) };
+        return unless $body;
+        my $id = $body->{id};
+        my $pending = $state->{$host}{ws}{pending};
+        return unless defined $id && $pending->{$id};
+        (delete $pending->{$id})->send($body);
+    });
+    $conn->on(finish => sub {
+        delete $state->{$host}{ws};
+    });
+
+    my $auth = _ws_call($scfg, 'auth.login_with_api_key', [$token]);
+    unless (!$auth->{error} && $auth->{result}) {
+        my $reason = $auth->{error}{message} // 'authentication rejected';
+        delete $state->{$host}{ws};
+        die "TrueNAS WebSocket auth failed for $host: $reason\n";
+    }
+
+    return $state->{$host}{ws};
+}
+
+# Makes one JSON-RPC 2.0 call over an already-connected WebSocket.
+# Returns the decoded {result=>...} or {error=>...} response envelope —
+# callers (normally just _api_ws) are responsible for checking ->{error}.
+sub _ws_call {
+    my ($scfg, $method, $params) = @_;
+    my $host = $scfg->{truenas_host};
+    my $ws   = $state->{$host}{ws}
+        or die "TrueNAS WebSocket connection not established for '$host'\n";
+
+    my $id  = $ws->{next_id}++;
+    my $req = { jsonrpc => '2.0', id => $id, method => $method, params => $params // [] };
+
+    my $cv = AnyEvent->condvar;
+    $ws->{pending}{$id} = $cv;
+    $ws->{conn}->send(encode_json($req));
+
+    my $timeout_w = AnyEvent->timer(after => 30, cb => sub {
+        return unless $ws->{pending}{$id};
+        delete $ws->{pending}{$id};
+        $cv->send({ error => { message => "TrueNAS WebSocket call '$method' timed out after 30s" } });
+    });
+    my $resp = $cv->recv;
+    undef $timeout_w;
+    return $resp;
+}
+
+# Translates a REST-style (method, path, data) call onto its JSON-RPC 2.0
+# equivalent and executes it over _ws_connect's transport. Read (query)
+# mappings are confirmed live (ADR-012); write mappings are inferred from
+# TrueNAS's documented CRUDService conventions — see the file header warning.
+sub _api_ws {
+    my ($scfg, $method, $path, $data) = @_;
+    _ws_connect($scfg);
+
+    $method = uc($method);
+    my ($base, $qs) = split /\?/, $path, 2;
+    my %q;
+    if (defined $qs) {
+        for my $pair (split /&/, $qs) {
+            my ($k, $v) = split /=/, $pair, 2;
+            $q{$k} = $v;
+        }
+    }
+
+    my ($rpc_method, $params, $single);
+
+    if ($base eq '/iscsi/global') {
+        $rpc_method = 'iscsi.global.config';
+        $params     = [];
+
+    } elsif ($base eq '/iscsi/portal') {
+        $rpc_method = 'iscsi.portal.query';
+        $params     = [[], {}];
+
+    } elsif ($base eq '/iscsi/target') {
+        if ($method eq 'POST') {
+            $rpc_method = 'iscsi.target.create';
+            $params     = [$data];
+        } else {
+            $rpc_method = 'iscsi.target.query';
+            $params     = [[], {}];
+        }
+
+    } elsif ($base =~ m{^/iscsi/target/id/(.+)$}) {
+        my $id = $1;
+        if ($method eq 'DELETE') {
+            $rpc_method = 'iscsi.target.delete';
+            $params     = [$id];
+        } else {
+            $rpc_method = 'iscsi.target.query';
+            $params     = [[[ 'id', '=', int($id) ]], {}];
+            $single     = 1;
+        }
+
+    } elsif ($base eq '/iscsi/targetextent') {
+        if ($method eq 'POST') {
+            $rpc_method = 'iscsi.targetextent.create';
+            $params     = [$data];
+        } else {
+            $rpc_method = 'iscsi.targetextent.query';
+            my @filter;
+            push @filter, [ 'target', '=', int($q{target}) ] if defined $q{target};
+            push @filter, [ 'extent', '=', int($q{extent}) ] if defined $q{extent};
+            $params = [\@filter, {}];
+        }
+
+    } elsif ($base =~ m{^/iscsi/targetextent/id/(.+)$}) {
+        $rpc_method = 'iscsi.targetextent.delete';
+        $params     = [$1, $data // JSON::false];
+
+    } elsif ($base eq '/iscsi/extent') {
+        if ($method eq 'POST') {
+            $rpc_method = 'iscsi.extent.create';
+            $params     = [$data];
+        } else {
+            $rpc_method = 'iscsi.extent.query';
+            $params     = [[], {}];
+        }
+
+    } elsif ($base =~ m{^/iscsi/extent/id/(.+)$}) {
+        $rpc_method = 'iscsi.extent.delete';
+        $params     = [$1, $data // {}];
+
+    } elsif ($base eq '/service/reload') {
+        $rpc_method = 'service.reload';
+        $params     = [$data->{service}];
+
+    } elsif ($base eq '/pool/dataset') {
+        if ($method eq 'POST') {
+            $rpc_method = 'pool.dataset.create';
+            $params     = [$data];
+        } else {
+            $rpc_method = 'pool.dataset.query';
+            my @filter;
+            push @filter, [ 'id',   '=', $q{id} ]   if defined $q{id};
+            push @filter, [ 'type', '=', $q{type} ] if defined $q{type};
+            $params = [\@filter, {}];
+        }
+
+    } elsif ($base =~ m{^/pool/dataset/id/(.+)$}) {
+        my $id = uri_unescape($1);
+        if ($method eq 'DELETE') {
+            $rpc_method = 'pool.dataset.delete';
+            $params     = [$id, $data // {}];
+        } else {
+            $rpc_method = 'pool.dataset.query';
+            $params     = [[[ 'id', '=', $id ]], {}];
+            $single     = 1;
+        }
+
+    } elsif ($base eq '/zfs/snapshot') {
+        if ($method eq 'POST') {
+            $rpc_method = 'zfs.snapshot.create';
+            $params     = [$data];
+        } else {
+            $rpc_method = 'zfs.snapshot.query';
+            my @filter;
+            push @filter, [ 'dataset', '=', uri_unescape($q{dataset}) ] if defined $q{dataset};
+            my %opts;
+            $opts{limit} = int($q{limit}) if defined $q{limit};
+            $params = [\@filter, \%opts];
+        }
+
+    } elsif ($base =~ m{^/zfs/snapshot/id/(.+)$}) {
+        $rpc_method = 'zfs.snapshot.delete';
+        $params     = [uri_unescape($1)];
+
+    } elsif ($base eq '/zfs/snapshot/rollback') {
+        $rpc_method = 'zfs.snapshot.rollback';
+        $params     = [$data->{id}, $data->{options}];
+    }
+
+    die "TrueNAS WebSocket transport: no JSON-RPC mapping for $method $path\n"
+        unless $rpc_method;
+
+    my $resp = _ws_call($scfg, $rpc_method, $params);
+
+    if ($resp->{error}) {
+        my $reason = (ref($resp->{error}{data}) eq 'HASH' && $resp->{error}{data}{reason})
+            ? " — $resp->{error}{data}{reason}"
+            : '';
+        my $msg = "TrueNAS API (WebSocket) $rpc_method: "
+            . ($resp->{error}{message} // 'unknown error') . $reason;
+        _log('err', $msg);
+        die "$msg\n";
+    }
+
+    my $result = $resp->{result};
+    return $single ? (ref($result) eq 'ARRAY' ? $result->[0] : $result) : $result;
 }
 
 # Returns (and caches) the iSCSI global config { basename, ... }
