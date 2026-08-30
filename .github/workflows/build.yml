@@ -474,9 +474,15 @@ jobs:
           git push
 
       - name: Publish to GitHub Pages testing dist
-        if: >-
-          needs.build.outputs.channel == 'testing' ||
-          needs.build.outputs.channel == 'development'
+        # Only real release/3.x / master beta builds go here. "development"
+        # channel (other release/* branches, e.g. release/4.x) must NOT land
+        # in this dist — it's shared/public, and this step does `rm -rf
+        # pool/testing` before copying in the new build, which would silently
+        # overwrite the real testing dist with an unrelated branch's alpha
+        # build (confirmed happening 2026-08-30 when release/4.x was created).
+        # No GitHub Pages publish target exists yet for "development" — it
+        # just builds/scans/uploads as a workflow artifact until one is added.
+        if: needs.build.outputs.channel == 'testing'
         env:
           APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
           APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}
