@@ -1,7 +1,7 @@
 # ADR-012: WebSocket JSON-RPC 2.0 Transport for v4.0.0 (Rivendell)
 
 **Date**: 2026-08-29
-**Status**: Draft — design decided and live-verified against both `.91` and `.92`; pending Kevin's sign-off to mark Accepted (one acknowledged gap: no 25.04.x/Fangtooth node in the lab to re-check NAS-135643 against)
+**Status**: Draft — design decided and live-verified against `.91`, `.92` (25.10.x), and `.92` again on 25.04.2.6, closing the last acknowledged gap; pending Kevin's sign-off to mark Accepted
 **Deciders**: Kevin Adams
 
 ## Context
@@ -17,10 +17,9 @@ starts (#243, comment 2026-08-23). Research sources: TrueNAS's official API docs
 (api.truenas.com, versioned per release), the `truenas/api_client` and
 `truenas/truenas_jsonrpc` reference repos, the `acme.sh` `truenas_ws.sh` deploy
 hook (a real, working non-Python client), and a TrueNAS forum thread confirming
-a live server-side bug. Full findings below, since live-verified against both
-`.91` and `.92` ([[project_truenas_lab_versions]]) — see Live Verification
-below for the one acknowledged gap (no 25.04.x/Fangtooth node currently in the
-lab to test against).
+a live server-side bug. Full findings below, live-verified against `.91` and
+`.92` across three different TrueNAS versions including 25.04.2.6 specifically
+([[project_truenas_lab_versions]]) — see Live Verification below.
 
 ### Current REST implementation (baseline)
 
@@ -96,22 +95,19 @@ only across the handful of calls within one.
 - **Keepalive**: `core.ping` exists; exact server timeout unconfirmed — client
   should use a conservative, configurable interval rather than assuming a
   specific value.
-- **Known live bug, NAS-135643 — does not reproduce on either lab node**:
+- **Known live bug, NAS-135643 — CLOSED, confirmed fixed on 25.04.2.6**:
   TrueNAS Jira NAS-135643 documented `iscsi.target.query` over JSON-RPC
   throwing a server-side `AttributeError` in the version-adapter layer on
   SCALE 25.04.0 (didn't reproduce on 24.10.2.1 either). Confirmed clean on
-  `.92` (TrueNAS-25.10.3.1, 2026-08-29, 1 target) and again on both `.91` and
-  `.92` after both converged to TrueNAS-25.10.6 (2026-08-30) — `.91` in
-  particular has real production-scale data (2 targets, 9 extents, 9
-  targetextents) and returned it correctly. TrueNAS appears to have fixed this
-  well before 25.10.x. **Not independently re-verified against 25.04.x
-  specifically** — the lab plan originally called for `.91` to sit on Fangtooth
-  as a moving target while `.92` stayed pinned at Goldeneye
-  ([[project_truenas_lab_versions]]), but `.91` was upgraded straight to
-  25.10.6 instead, so both lab nodes are now on the same version and there's no
-  live 25.04.x node left to test against. Low residual risk given two
-  independent confirmations on 25.10.x, but worth noting as an actual gap, not
-  an oversight.
+  `.92` (TrueNAS-25.10.3.1, 2026-08-29), again on both `.91` and `.92` after
+  both converged to TrueNAS-25.10.6 (2026-08-30, `.91` with real
+  production-scale data — 2 targets, 9 extents, 9 targetextents), **and
+  finally on `.92` rebuilt to TrueNAS-25.04.2.6 specifically (2026-08-30)** —
+  the exact SCALE minor version the bug was originally filed against, just two
+  patch levels later. `iscsi.target.query` returned a real target cleanly, no
+  error. This closes the gap this ADR previously flagged (no 25.04.x node in
+  the lab) — confirmed fixed by 25.04.2, not just inferred from newer
+  versions.
 - No official/upstream Perl implementation exists. `truenas/api_client`
   (Python, official, not on PyPI) and `truenas/truenas_jsonrpc` (protocol spec,
   language-agnostic, in `ARCHITECTURE.md`) are the best official reference
@@ -203,23 +199,33 @@ shape that it's fair to call it a clean break rather than an incremental step.
 Both are speculative future-version ideas, not commitments — revisit once
 v4.0.0's WebSocket transport is actually shipped.
 
-## Live verification (2026-08-29/30, against `.91` and `.92`)
+## Live verification (2026-08-29/30, against `.91` and `.92`, three TrueNAS versions)
 
 Built `scripts/truenas-ws-diag.pl` — a standalone, read-only diagnostic (not part
 of the packaged plugin) that connects via `AnyEvent::WebSocket::Client`,
 authenticates, and exercises every method in the mapping table above. Ran it
-from pve01-hq three times as the lab nodes moved:
+from pve01-hq four times as the lab nodes moved:
 
 | Run | Host | TrueNAS version | Result |
 |---|---|---|---|
 | 2026-08-29 | `.92` (192.168.69.92) | `TrueNAS-25.10.3.1` | All 8 method families OK, `login_ex`/root → `AUTH_ERR`, `login_with_api_key` OK |
 | 2026-08-30 | `.92` (192.168.69.92) | `TrueNAS-25.10.6` (upgraded) | Re-ran after the point-release bump — identical results |
 | 2026-08-30 | `.91` (172.31.69.91) | `TrueNAS-25.10.6` (upgraded straight past Fangtooth) | All 8 method families OK against real production-scale data (2 targets, 9 extents); `login_ex`/root → **SUCCESS** this time — see Auth bullet above for why that differs from `.92` |
+| 2026-08-30 | `.92` (192.168.69.92) | `TrueNAS-25.04.2.6` (fresh rebuild, per-lab-role revision — see [[project_truenas_lab_versions]]) | All 8 method families OK against a wizard-created target/portal; `iscsi.target.query` (the NAS-135643 method) confirmed clean on this exact minor version — **closes the gap** |
 
 - **Auth resolved with more nuance than the first pass concluded** — see the
   Auth bullet above. `login_ex` works correctly per-key; `login_with_api_key`
   is still the right implementation choice because it works regardless of
-  which account owns the key, with no username field needed.
+  which account owns the key, with no username field needed. One more
+  auth-flow gotcha found on `.92`'s fresh 25.04.2.6 install: retrying
+  `auth.login_ex` a second time on the *same* WebSocket connection after a
+  first failed attempt threw a raw, unhandled `RuntimeError('AUTH: unexpected
+  authenticator run state. Expected: START')` — server-side state left over
+  from the first attempt, not a clean rejection. Didn't block anything (the
+  diagnostic's third attempt, `login_with_api_key`, still succeeded
+  afterward on the same connection), but it reinforces the recommendation:
+  the real implementation should call `login_with_api_key` directly, never
+  attempt `login_ex` speculatively first on a connection that might retry.
 - Also hit a real Perl gotcha worth documenting for implementation: `JSON`'s
   `decode_json` turns a JSON `true`/`false` into a blessed `JSON::PP::Boolean`
   object, not a plain `1`/`0` — `ref()` on it is truthy, so a naive
@@ -230,22 +236,20 @@ from pve01-hq three times as the lab nodes moved:
   `iscsi.portal.query`, `iscsi.target.query`, `iscsi.extent.query`,
   `iscsi.targetextent.query`, `pool.dataset.query`, `zfs.snapshot.query`,
   `core.ping` all returned clean data with real values, no method-not-found or
-  schema errors, on both a near-empty test box (`.92`) and a box with real
-  production-scale iSCSI config (`.91`).
-- **NAS-135643 does not reproduce** on either node at 25.10.x (see bullet
-  above) — no longer a hard blocker, though not independently re-verified
-  against 25.04.x specifically now that both lab nodes have converged past it.
+  schema errors, across a near-empty test box, a box with real
+  production-scale iSCSI config, and a fresh from-scratch install.
+- **NAS-135643 confirmed fixed**, including on 25.04.2.6 specifically (see
+  bullet above) — no longer a hard blocker, and no longer just inferred from
+  newer versions.
 
-This resolves nearly all of the "unconfirmed, verify against live lab" items
-this ADR originally flagged, on two independent real TrueNAS installations
-rather than just one. The one item that's now a genuine, acknowledged gap
-rather than a pending task: `.91` was meant to sit on Fangtooth (25.04) as a
-moving target while `.92` stayed pinned at Goldeneye, but was upgraded straight
-to 25.10.6 instead — there is currently no 25.04.x node in the lab to test
-against. The lab plan has since been revised to avoid this ambiguity going
-forward: `.90`/`.91` now stay on latest stable (pseudo-production baseline),
-and `.92` is the designated dynamic/development node for any future
-version-specific testing this ADR's implementation work needs
+This resolves every "unconfirmed, verify against live lab" item this ADR
+originally flagged, including the one that was still an acknowledged gap as of
+2026-08-30 morning: `.92` was rebuilt from scratch to TrueNAS-25.04.2.6
+specifically (Kevin's own infrastructure work, not something drivable via
+API) to close it. No remaining live-verification gaps for this ADR. The lab
+plan has also been revised for future testing: `.90`/`.91` now stay on latest
+stable (pseudo-production baseline), and `.92` is the designated
+dynamic/development node for whatever version-specific testing comes up next
 ([[project_truenas_lab_versions]]).
 
 ## Consequences
@@ -313,4 +317,4 @@ branch's own alpha-channel versioning.
 - ADR-013 (branching strategy — role-based branch naming, why this ADR's branch was renamed)
 - `truenas/truenas_jsonrpc` (protocol spec) and `truenas/api_client` (Python reference client) on GitHub
 - [boomshankerx/proxmox-truenas](https://github.com/boomshankerx/proxmox-truenas) (independent AGPL-3.0 successor project, reference only — see Prior Art above)
-- TrueNAS Jira NAS-135643 (live 25.04.0 bug in `iscsi.target.query` over JSON-RPC)
+- TrueNAS Jira NAS-135643 (bug in `iscsi.target.query` over JSON-RPC on SCALE 25.04.0 — confirmed fixed by 25.04.2.6, see Live Verification above)
