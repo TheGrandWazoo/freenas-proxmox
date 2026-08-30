@@ -303,6 +303,27 @@ history, just a new name — `$VERSION` in `TrueNAS.pm` stays at the `main`
 branch's value (`3.2.5`) until real implementation code lands here, per the
 branch's own alpha-channel versioning.
 
+**2026-08-30 (later same day) — first real implementation landed.** `_api_ws`,
+`_ws_connect`, `_ws_call`, and `_transport()` added to `TrueNAS.pm` on `next`,
+matching this ADR's decided design exactly (`AnyEvent::WebSocket::Client`,
+`auth.login_with_api_key`, hand-built JSON-RPC envelope). `$VERSION` bumped to
+`4.0.0`. Live-verified end-to-end against `.92` (TrueNAS-25.04.2.6) through the
+actual plugin module (not just `scripts/truenas-ws-diag.pl`) — transport
+auto-detection, `_api_global`, portal/target queries, and the single-ID
+lookup mapping used by `path()`/`qemu_blockdev_options()` all confirmed
+working. This exercises every *read* call the plugin makes; the *write* path
+(create/delete param shapes) is implemented but not yet independently
+live-tested — see the file's own header warning and re-verify before trusting
+`alloc_image`/`free_image`/snapshot operations in production on SCALE 25.04+.
+
+One real bug caught and fixed during this integration pass: `_transport()`'s
+first draft checked `/system/product_type eq 'SCALE'` to distinguish CORE from
+SCALE, but that endpoint returns the license tier (e.g. `"COMMUNITY_EDITION"`),
+not the product family — it was always false, so transport detection always
+fell back to REST regardless of actual version. Fixed by parsing the
+`/system/version` string's major-version magnitude instead (SCALE's calendar
+versioning is unambiguously >= 24; CORE has only ever used 11.x-13.x).
+
 ## References
 
 - ADR-009 (established v4.0.0 = WebSocket, this ADR is the "how")
@@ -314,6 +335,7 @@ branch's own alpha-channel versioning.
 - `scripts/truenas-ws-diag.pl` (this repo — the read-only diagnostic tool used for the 2026-08-29 live verification above)
 - `docs/architecture.md` §9 (multipath's inheritance of this ADR's transport work, and the multipath docs added 2026-08-30)
 - `next` branch (implementation work for this ADR lives here, renamed from `release/4.x` 2026-08-30; see Implementation branch above)
+- `perl5/PVE/Storage/Custom/TrueNAS.pm` on `next` (`_api_ws`/`_ws_connect`/`_ws_call`/`_transport` — the actual implementation, first landed 2026-08-30)
 - ADR-013 (branching strategy — role-based branch naming, why this ADR's branch was renamed)
 - `truenas/truenas_jsonrpc` (protocol spec) and `truenas/api_client` (Python reference client) on GitHub
 - [boomshankerx/proxmox-truenas](https://github.com/boomshankerx/proxmox-truenas) (independent AGPL-3.0 successor project, reference only — see Prior Art above)
