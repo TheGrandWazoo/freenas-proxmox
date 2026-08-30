@@ -241,6 +241,32 @@ cutoff `iscsi.global.config` etc. depend on.
   `pool.dataset.delete` returns one) and needs `ref() eq 'HASH'` guarding.
 - #249 (per-variant dispatch) stays deferred past v4.0.0 — tracked as possible
   v4.1/v5.0 scope, see Question 2 above.
+- **`TrueNASMultipath.pm` needs no separate WebSocket work.** It calls
+  `PVE::Storage::Custom::TrueNAS::_api(...)` directly (a fully-qualified sub
+  call, not an overridable method) for every operation except its four
+  multipath-specific overrides (`path`, `qemu_blockdev_options`,
+  `activate_volume`, `deactivate_volume`, none of which touch the TrueNAS API
+  directly). Once `_api()` becomes the REST/WS dispatcher decided above,
+  multipath inherits WebSocket support automatically. Documented in
+  `docs/architecture.md` §9 (added 2026-08-30, alongside README/docs coverage
+  for the multipath package that had been missing since its v3.2.0 release).
+
+## Implementation branch
+
+Development for this ADR happens on `release/4.x` (created 2026-08-29,
+branched from `release/3.x`) — CI already resolves pushes there to
+`<VERSION>~alpha+<sha>` / `truenas-proxmox-snapshots` per the existing
+`build.yml` version-bucketing logic (see ADR references below), no workflow
+changes were needed for that part. Standing it up did surface one real,
+previously-dormant CI bug worth noting here since it's a direct consequence of
+this ADR's work existing on its own branch: the "Publish to GitHub Pages
+testing dist" step ran for both `testing` and `development` channel builds and
+did `rm -rf pool/testing` first, so the first `release/4.x` push briefly
+overwrote the public testing dist with an unrelated alpha build. Fixed in
+`build.yml` (restricted that step to `channel == 'testing'` only) and verified
+live; `$VERSION` in `TrueNAS.pm` stays at the `release/3.x` value (`3.2.5`)
+until real implementation code lands here, per the branch's own alpha-channel
+versioning.
 
 ## References
 
@@ -251,6 +277,8 @@ cutoff `iscsi.global.config` etc. depend on.
   discussion that produced the prior art above)
 - [[project_truenas_lab_versions]] (test lab plan for verifying the unconfirmed items above)
 - `scripts/truenas-ws-diag.pl` (this repo — the read-only diagnostic tool used for the 2026-08-29 live verification above)
+- `docs/architecture.md` §9 (multipath's inheritance of this ADR's transport work, and the multipath docs added 2026-08-30)
+- `release/4.x` branch (implementation work for this ADR lives here; see Implementation branch above)
 - `truenas/truenas_jsonrpc` (protocol spec) and `truenas/api_client` (Python reference client) on GitHub
 - [boomshankerx/proxmox-truenas](https://github.com/boomshankerx/proxmox-truenas) (independent AGPL-3.0 successor project, reference only — see Prior Art above)
 - TrueNAS Jira NAS-135643 (live 25.04.0 bug in `iscsi.target.query` over JSON-RPC)
