@@ -93,14 +93,14 @@ If a node fences (reboots unexpectedly) while Move Disk is in progress, the HA m
 
 ## Single portal — single point of failure
 
-v3.0 does not support iSCSI multipath. QEMU's libiscsi opens one connection to the portal IP and retries on failure but does not fail over to a second IP.
+The default `truenas` storage type does not support iSCSI multipath. QEMU's libiscsi opens one connection to the portal IP and retries on failure but does not fail over to a second IP.
 
 If your TrueNAS has multiple network interfaces or portal IPs, `truenas_portal_ip` selects exactly one. **All Proxmox nodes must be able to reach that IP on port 3260.** A failure of that interface will cause all VMs on that storage to lose disk access.
 
 Options for resilience:
 - Use a floating/virtual IP at the network layer (bond, VRRP/CARP)
 - Ensure the portal IP is on a highly available network segment
-- Multipath support is tracked for a future release
+- **Install `truenas-proxmox-multipath`** (shipped in v3.2.0) — a separate storage type, `truenas-multipath`, that uses kernel `iscsiadm` + `dm-multipath` across two or more portals instead of a single `iscsi://` connection. See [README → Multipath](../README.md#multipath-optional) and [architecture.md §9](architecture.md#9-multipath-storage-type-truenas-multipath) for setup and how it works.
 
 ---
 

@@ -45,7 +45,7 @@ This plugin is a native `PVE::Storage::Custom` type — Proxmox discovers it aut
 
 | Plugin Version | Proxmox VE | TrueNAS CORE | TrueNAS SCALE | Status |
 |:--------------:|:----------:|:------------:|:-------------:|:------:|
-| **3.x** *(stable)* | 8.4.x ✅, 9.x ✅ | 13.0-U6+ ✅ | Electric Eel (24.10) ✅, Fangtooth (25.04) ✅, Goldeye (25.10) ✅ | Stable |
+| **3.x** *(stable)* | 8.4.x ✅, 9.x ✅ | 13.0-U6+ ✅ | Electric Eel (24.10) ✅, Fangtooth (25.04) ✅, Goldeneye (25.10) ✅ | Stable |
 | **2.x** *(stable)* | 7.x ⚠️, 8.0–8.3 ✅, 8.4.x ✅ | 11.3+ | 22.02+ | Active |
 | **1.x** *(legacy)* | 5.x, 6.x | 11.x | — | Unsupported |
 
@@ -57,19 +57,19 @@ Tested combinations are marked ✅. Untested combinations may work but are not v
 >
 > v2.x is the **last release series that supports PVE 7**. PVE 7 support is best-effort only — no new patches will be developed for it.
 >
-> v3.0 requires Proxmox VE 8 or later. Stay on the latest v2.x release.
+> v3.x requires Proxmox VE 8 or later. Stay on the latest v2.x release.
 
 > **Proxmox VE 8 users**
 >
-> v3.0 beta is tested and working on PVE 8.4.x. This is the recommended version for running v3.0 beta.
+> v3.x is tested and working on PVE 8.4.x.
 >
-> Proxmox VE 8 reaches **end-of-life on 2026-08-31**. PVE 9 support is targeted for v3.1.0, planned well before that date.
+> Proxmox VE 8 reaches **end-of-life on 2026-08-31**. Plan your upgrade to PVE 9 — v3.x is already tested and fully supported there.
 
 > **Proxmox VE 9+ users**
 >
-> v3.0 beta has a **known issue on PVE 9.x** — VMs may fail to start due to a LUN type mismatch in QEMU's blockdev layer ([#266](https://github.com/TheGrandWazoo/freenas-proxmox/issues/266)). PVE 9.x support is actively being investigated for **v3.1.0**.
+> v3.x is tested and fully supported on PVE 9.x (tested: 9.2.3). The earlier LUN type mismatch in QEMU's blockdev layer ([#266](https://github.com/TheGrandWazoo/freenas-proxmox/issues/266)) was fixed in v3.1.0 — no known issues on PVE 9.
 >
-> v2.x is not supported on PVE 9. Stay on PVE 8.x until v3.1.0 is available.
+> v2.x is not supported on PVE 9. Upgrade to v3.x if you're moving to PVE 9.
 
 > **Proxmox VE 5 or 6 users**
 >
@@ -81,9 +81,9 @@ Check the [Releases page](https://github.com/TheGrandWazoo/truenas-proxmox/relea
 
 ## Prerequisites
 
-### v3.0 (beta)
+### v3.x
 
-v3.0 is a fully API-driven custom storage plugin. No SSH keys required.
+v3.x is a fully API-driven custom storage plugin. No SSH keys required.
 
 1. On **TrueNAS**, ensure the iSCSI service is running and an iSCSI **portal** and **initiator group** are configured. The plugin creates per-VM iSCSI targets automatically — you do not need to pre-create a target.
 
@@ -103,6 +103,14 @@ v3.0 is a fully API-driven custom storage plugin. No SSH keys required.
 > If your VM uses Secure Boot or TPM, store the `tpmstate0` disk on a separate storage (e.g. `local-lvm` or NFS). All other disk types — virtio, scsi, IDE, EFI — work normally.
 >
 > For live VM migration with TPM, the TPM state disk must also be on shared filesystem storage (NFS or CephFS), not on this plugin's storage.
+
+### Multipath (optional)
+
+By default, the plugin uses QEMU's `iscsi://` path directly — a single network path to TrueNAS. If that path goes down, disk I/O stops until it recovers; QEMU does not fail over to a second portal on its own.
+
+For sites with two or more independent network paths to TrueNAS, the separate **`truenas-proxmox-multipath`** package adds a second storage type (`truenas-multipath`) backed by the kernel's `iscsiadm` + `dm-multipath` instead of `iscsi://` — QEMU accesses a `/dev/mapper/<wwid>` block device that stays up as long as any one path is healthy. See [Installation → Multipath](#multipath-optional-1) below.
+
+> **Requires:** two or more TrueNAS iSCSI portals on separate network paths reachable from every Proxmox node, and `truenas-proxmox` v3.1.0+ already installed. Not needed if you only have a single network path to TrueNAS.
 
 ### v2.x (legacy)
 
@@ -321,6 +329,37 @@ To switch back to stable, replace `Suites: testing` with `Suites: v3` in `truena
 
 ---
 
+### Multipath (optional)
+
+Ships as a separate package so single-path installs never pull in `iscsiadm`/`multipath-tools` they don't need. Requires `truenas-proxmox` already installed (see [Stable Release](#stable-release-v3x) above) and at least two TrueNAS iSCSI portals on separate network paths — see [Prerequisites → Multipath](#multipath-optional) for the full requirement.
+
+Add the `multipath` component to your existing `truenas-proxmox.sources` (or `.list`) file — same dist track (`v3`/`testing`/etc.) you're already using for the base package:
+
+```bash
+# deb822 format — add "multipath" alongside "main" in Components
+sudo sed -i 's/^Components: main$/Components: main multipath/' \
+  /etc/apt/sources.list.d/truenas-proxmox.sources
+
+sudo apt update && sudo apt install truenas-proxmox-multipath
+```
+
+<details>
+<summary>One-liner <code>.list</code> format</summary>
+
+```bash
+echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
+https://thegrandwazoo.github.io/freenas-proxmox v3 main multipath" \
+  | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
+
+sudo apt update && sudo apt install truenas-proxmox-multipath
+```
+
+</details>
+
+This installs `open-iscsi` and `multipath-tools` as dependencies and registers the `truenas-multipath` storage type. See [Configuration → Multipath Storage](#multipath-storage) for the extra field it needs, and [docs/architecture.md](docs/architecture.md) for how it differs from the default single-path `iscsi://` model.
+
+---
+
 ## Configuration
 
 After installation, **refresh your browser** to load the updated Proxmox UI. Then add a new storage:
@@ -344,6 +383,16 @@ After installation, **refresh your browser** to load the updated Proxmox UI. The
 | Target IQN | Optional — leave blank; auto-discovered from existing iSCSI targets. |
 
 Authentication is **Bearer token only** — username/password auth was removed in v3.0. If you're still on v2.x, see [Migrating from v2.x](docs/migrating-from-v2.md).
+
+### Multipath Storage
+
+If you installed `truenas-proxmox-multipath` (see [Installation → Multipath](#multipath-optional-1)), add storage as **Datacenter → Storage → Add → TrueNAS Multipath (ZFS/iSCSI)** instead. All the fields above apply, plus one more:
+
+| Field | Value |
+|-------|-------|
+| Portals | Comma-separated list of iSCSI portal IPs, one per network path — e.g. `172.31.69.91,192.168.69.91`. Each is logged into separately; `dm-multipath` aggregates the sessions into one block device. |
+
+A `truenas-multipath` storage cannot be edited into a plain `truenas` storage (or vice versa) after creation — pick the right storage type up front, or remove and re-add it.
 
 ### Securing the API Token (Recommended for Production)
 
@@ -388,7 +437,7 @@ v3.0 is a different storage plugin type (`PVE::Storage::Custom::TrueNAS`) and us
 
 #### Step-by-step
 
-1. **Install v3.0** on all Proxmox nodes (see [Installation](#installation) — use the testing channel until v3.0 is stable-released).
+1. **Install v3.x** on all Proxmox nodes (see [Installation](#installation)).
 
 2. **Add a new v3.0 storage** in Proxmox (*Datacenter → Storage → Add → TrueNAS (ZFS/iSCSI)*). Use the same TrueNAS pool as your existing v2.x storage. Give it a distinct ID (e.g. `truenas-v3`).
 
@@ -404,7 +453,7 @@ v3.0 is a different storage plugin type (`PVE::Storage::Custom::TrueNAS`) and us
 
 5. **Remove the v2.x storage** from Proxmox once all VMs are migrated (*Datacenter → Storage → Remove*). The iSCSI targets and extents that belonged to the old storage will need to be cleaned up from TrueNAS manually if they were not auto-removed.
 
-> **Note:** EFI disks (`efidisk0`) and data disks can be migrated with Move Disk. TPM state disks (`tpmstate0`) must stay on local-lvm or NFS — see the [TPM limitation](#v30-upcoming) in Prerequisites.
+> **Note:** EFI disks (`efidisk0`) and data disks can be migrated with Move Disk. TPM state disks (`tpmstate0`) must stay on local-lvm or NFS — see the [TPM limitation](#v3x) in Prerequisites.
 
 ---
 
@@ -412,6 +461,12 @@ v3.0 is a different storage plugin type (`PVE::Storage::Custom::TrueNAS`) and us
 
 ```bash
 apt remove truenas-proxmox
+```
+
+If you also installed the multipath package, remove it too (before or after — order doesn't matter, but do both if you're fully removing the plugin):
+
+```bash
+apt remove truenas-proxmox-multipath
 ```
 
 This removes the plugin and reverses all patches, returning your Proxmox VE installation to its unmodified state. Any storage configurations using this plugin should be removed from Proxmox before uninstalling.
@@ -511,7 +566,7 @@ TrueNAS SCALE 25.04 **revokes all existing API keys** that were created with whi
 
 **Additionally**, TrueNAS SCALE 25.04 enforces HTTPS for API key authentication — keys transmitted over plain HTTP are automatically revoked. Ensure **Use SSL** is enabled in your Proxmox storage config when using token auth.
 
-> **Note:** TrueNAS SCALE 25.04 also deprecates the REST API used by this plugin (v2.x). Full removal is planned for SCALE 26.x. Plugin v3.0.0 will add WebSocket JSON-RPC 2.0 support. See [issue #243](https://github.com/TheGrandWazoo/truenas-proxmox/issues/243).
+> **Note:** TrueNAS SCALE 25.04 also deprecates the REST API this plugin uses (v3.x, all versions to date). It still works through at least SCALE 25.10; full removal is planned for SCALE 26.x. TrueNAS CORE has no plans to remove REST. WebSocket JSON-RPC 2.0 support — needed before SCALE 26.x — is planned for **v4.0.0**, currently in design (see [ADR-012](.claude/cos/adrs/ADR-012-websocket-transport-v4.md) and [issue #243](https://github.com/TheGrandWazoo/truenas-proxmox/issues/243)).
 
 ### Disk size in Proxmox shows larger than what I entered
 

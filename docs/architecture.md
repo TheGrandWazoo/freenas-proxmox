@@ -1,4 +1,4 @@
-# freenas-proxmox v3.0 — Architecture & Developer Guide
+# truenas-proxmox v3.x — Architecture & Developer Guide
 
 ## Table of Contents
 
@@ -10,7 +10,8 @@
 6. [free_image Deep Dive](#6-free_image-deep-dive)
 7. [Build Pipeline and Version/Channel Routing](#7-build-pipeline-and-versionchannel-routing)
 8. [Debugging Guide](#8-debugging-guide)
-9. [Contributing](#9-contributing)
+9. [Multipath Storage Type (`truenas-multipath`)](#9-multipath-storage-type-truenas-multipath)
+10. [Contributing](#10-contributing)
 
 ---
 
@@ -146,7 +147,7 @@ Because QEMU manages the connection itself, `activate_volume` only verifies that
 
 ### Constraints of the iscsi:// Model
 
-- **No multipath**: libiscsi in QEMU does not do multipath. If the portal is unreachable, QEMU retries but does not fail over to a second portal. Multi-portal TrueNAS setups are not effective with this model (tracked for v3.1.0, #256).
+- **No multipath**: libiscsi in QEMU does not do multipath. If the portal is unreachable, QEMU retries but does not fail over to a second portal. Multi-portal TrueNAS setups are not effective with this model. **Solved by a separate package**: `truenas-proxmox-multipath` (shipped in v3.2.0, #256) registers a second storage type, `truenas-multipath`, that uses kernel `iscsiadm` + `dm-multipath` instead of `iscsi://` — see [§9](#9-multipath-storage-type-truenas-multipath) below.
 - **TPM disks excluded**: `swtpm` cannot use `iscsi://` URIs. Any disk assigned to a VM's TPM must be on a different storage type (e.g., local-lvm, directory).
 - **No host-visible device**: Because there is no kernel iSCSI session, tools like `lsscsi`, `iscsiadm --mode session`, or `ls /dev/disk/by-path` will not show the disk on the Proxmox host. This is expected and correct.
 
@@ -549,7 +550,36 @@ cat /var/log/freenas-proxmox-install.log
 
 ---
 
-## 9. Contributing
+## 9. Multipath Storage Type (`truenas-multipath`)
+
+Ships as a separate package, `truenas-proxmox-multipath` (v3.2.0+, #256), because it pulls in `open-iscsi` and `multipath-tools` — dependencies the default single-path model in §3 doesn't need. `TrueNASMultipath.pm` extends `TrueNAS.pm` (`use base qw(PVE::Storage::Custom::TrueNAS)`) and registers as PVE storage type `truenas-multipath`, adding one new config field (`truenas_portals`, a comma-separated list of iSCSI portal IPs) on top of everything `TrueNAS.pm` already declares.
+
+### What it overrides vs. inherits
+
+Everything in §5–§6 (`alloc_image`, `free_image`, zvol/extent/target lifecycle) is **inherited unchanged** — `TrueNASMultipath.pm` calls the shared `PVE::Storage::Custom::TrueNAS::_api(...)` helper directly (a fully-qualified sub call, not a virtual method), so any future transport change to that helper (e.g. the WebSocket work in [ADR-012](../.claude/cos/adrs/ADR-012-websocket-transport-v4.md)) applies to multipath automatically with no separate implementation work.
+
+Only four methods are overridden, replacing the `iscsi://` model from §3 with a kernel iSCSI + `dm-multipath` model:
+
+- **`path`** — returns `/dev/mapper/<wwid>` instead of an `iscsi://` URI. The WWID is derived from the extent's TrueNAS NAA identifier.
+- **`qemu_blockdev_options`** — delegates to `PVE::Storage::Plugin::qemu_blockdev_options` (the `host_device` blockdev type for a real block device), since `TrueNAS.pm`'s override returns an `iscsi://` blockdev that doesn't apply here.
+- **`activate_volume`** — logs into *every* configured portal via `iscsiadm -m node -T <iqn> -p <portal>:3260 --login`, signals `multipathd reconfigure`, then polls for `/dev/mapper/<wwid>` to appear before returning. Unlike `TrueNAS.pm`'s no-op `activate_volume` (§3), this one does real session/device work.
+- **`deactivate_volume`** — flushes the multipath device (`multipath -f <wwid>`) then logs out of every portal.
+
+### Path failover behavior (confirmed via live testing, 2026-08-29)
+
+`multipath.conf`'s managed stanza (injected by `postinst` between tagged markers) sets `path_grouping_policy multibus` — all portals sit in one priority group, all active simultaneously, rather than active/passive failover groups. Live-tested against a real two-portal TrueNAS SCALE host:
+
+- Both paths show `active ready running` under one group in `multipath -ll`
+- Logging out one portal's iSCSI session (simulating a path failure) drops it from the map immediately; the device stays readable on the surviving path with no I/O interruption
+- Logging back in, `multipathd` re-adds the path automatically — no manual `multipath -r`/reconfigure needed
+
+### Constraint this does *not* solve
+
+Live multipath failover requires the VM's disk to actually be activated (i.e., the VM running or a disk hotplug in progress) — `activate_volume` is what triggers the `iscsiadm`/`multipathd` work. A storage that's configured but never activated has no kernel sessions or mapper device yet, same as any lazily-activated PVE storage.
+
+---
+
+## 10. Contributing
 
 ### Quick Iteration on a Live Proxmox Node
 

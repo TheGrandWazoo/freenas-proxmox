@@ -188,6 +188,12 @@ The keyfile must exist on <strong>every Proxmox node</strong> — copy it manual
 session management is needed on the Proxmox host. When the last disk for a VM is deleted,
 the per-VM target is automatically removed.</p>
 
+<p><strong>Single network path only.</strong> If you need automatic failover across two or
+more independent paths to TrueNAS, install the separate <code>truenas-proxmox-multipath</code>
+package instead, which adds a second storage type (<strong>TrueNAS Multipath (ZFS/iSCSI)</strong>)
+backed by kernel <code>iscsiadm</code> + <code>dm-multipath</code>. See the project README's
+Multipath section for setup.</p>
+
 <h2>Common Problems</h2>
 
 <table>
