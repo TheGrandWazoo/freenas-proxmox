@@ -173,6 +173,12 @@ Introduces the `truenas-proxmox-multipath` optional add-on package. Active-activ
 |---|-------|
 | [#243](https://github.com/TheGrandWazoo/freenas-proxmox/issues/243) | WebSocket JSON-RPC 2.0 API support (TrueNAS SCALE 25.04+) |
 
+### Ideas under consideration (not committed)
+
+| # | Title | Notes |
+|---|-------|-------|
+| [#289](https://github.com/TheGrandWazoo/freenas-proxmox/issues/289) | UI: show installed plugin + TrueNAS version per storage | Floated 2026-08-30 alongside #243/ADR-012 work — a per-node plugin version and per-storage TrueNAS version could differ across a cluster, similar to how Ceph's panel surfaces per-node version info. Possible v4.0.0 scope, backported to v3.x if small enough. |
+
 ---
 
 ## Process Rules
