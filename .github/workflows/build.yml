@@ -2,10 +2,15 @@ name: CI / Build / Publish
 
 on:
   push:
-    branches: ["**"]
+    # main = current stable major (fixed name, never renamed at a version
+    # cutover). next = the in-progress next major, pre-cutover (also fixed).
+    # release/*.x = archived, already-superseded majors (e.g. release/2.x) --
+    # matched by pattern so a newly-archived major needs no workflow edit.
+    # See ADR-013.
+    branches: [main, next, "release/*.x"]
     tags: ["v*.*.*"]
   pull_request:
-    branches: [master, "release/3.x"]
+    branches: [main, next, "release/*.x"]
 
 env:
   PACKAGE_NAME: truenas-proxmox
@@ -94,11 +99,14 @@ jobs:
           fetch-depth: 0
 
       # ── Version resolution ─────────────────────────────────────────────────
-      # Version strategy:
-      #   Tagged release (v3.x.x)   →  3.x.x-1           (stable channel)
-      #   release/3.x branch        →  <ver>~beta+<sha>   (testing channel)
-      #   master branch             →  <ver>~beta+<sha>   (testing channel)
-      #   release/* branches        →  <ver>~alpha+<sha>  (development)
+      # Version strategy (see ADR-013 -- branch identity is role-based, not
+      # version-numbered, specifically so this logic never needs editing at a
+      # major-version cutover again):
+      #   Tagged release (vX.Y.Z)   →  X.Y.Z-1           (stable channel)
+      #   main   (current stable)   →  <ver>~beta+<sha>   (testing channel)
+      #   next   (in-progress next major) → <ver>~alpha+<sha> (development)
+      #   release/*.x (archived, superseded majors, e.g. release/2.x)
+      #                              →  <ver>~alpha+<sha>  (development)
       #   everything else / PRs     →  <ver>~dev+<sha>    (no publish)
       #
       # Tilde (~) sorts BELOW the base version in dpkg, so pre-release builds
@@ -123,12 +131,12 @@ jobs:
               echo "::warning::Tag version (${REF#refs/tags/v}) does not match \$VERSION in TrueNAS.pm ($BASE_VERSION)"
             fi
 
-          elif [[ "$REF" == refs/heads/master || "$REF" == refs/heads/release/3.x ]]; then
+          elif [[ "$REF" == "refs/heads/main" ]]; then
             VERSION="${BASE_VERSION}~beta+${SHORT_SHA}"
             CHANNEL="testing"
             CLOUDSMITH_REPO="truenas-proxmox-testing"
 
-          elif [[ "$REF" == refs/heads/release/* ]]; then
+          elif [[ "$REF" == "refs/heads/next" || "$REF" =~ ^refs/heads/release/.+\.x$ ]]; then
             VERSION="${BASE_VERSION}~alpha+${SHORT_SHA}"
             CHANNEL="development"
             CLOUDSMITH_REPO="truenas-proxmox-snapshots"
@@ -474,12 +482,13 @@ jobs:
           git push
 
       - name: Publish to GitHub Pages testing dist
-        # Only real release/3.x / master beta builds go here. "development"
-        # channel (other release/* branches, e.g. release/4.x) must NOT land
-        # in this dist — it's shared/public, and this step does `rm -rf
+        # Only real "main" beta builds go here (see ADR-013). "development"
+        # channel (next, or an archived release/*.x branch) must NOT land in
+        # this dist — it's shared/public, and this step does `rm -rf
         # pool/testing` before copying in the new build, which would silently
         # overwrite the real testing dist with an unrelated branch's alpha
-        # build (confirmed happening 2026-08-30 when release/4.x was created).
+        # build (confirmed happening 2026-08-30 when the old release/4.x
+        # branch, since renamed to "next", was created).
         # No GitHub Pages publish target exists yet for "development" — it
         # just builds/scans/uploads as a workflow artifact until one is added.
         if: needs.build.outputs.channel == 'testing'
@@ -596,4 +605,4 @@ jobs:
             See [README → Installation](https://github.com/TheGrandWazoo/truenas-proxmox#installation).
 
             ### Changes
-            See [CHANGELOG.md](https://github.com/TheGrandWazoo/truenas-proxmox/blob/release/3.x/CHANGELOG.md).
+            See [CHANGELOG.md](https://github.com/TheGrandWazoo/truenas-proxmox/blob/${{ github.ref_name }}/CHANGELOG.md).

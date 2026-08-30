@@ -7,7 +7,7 @@ This file captures release scope, business decisions, and deferred items. It is 
 ## Released — v3.0.0 (TrueNAS Custom Plugin)
 
 **Released:** 2026-05-31  
-**Branch:** `release/3.x` (default branch)  
+**Branch:** `release/3.x` (default branch at the time; renamed to `main` 2026-08-30, see ADR-013)  
 **GitHub Release:** https://github.com/TheGrandWazoo/freenas-proxmox/releases/tag/v3.0.0
 
 Full rewrite as a native `PVE::Storage::Custom` plugin. No patching of PVE files, no SSH, full TrueNAS REST API, bearer token auth only.

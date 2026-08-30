@@ -1,7 +1,7 @@
 # ADR-006: Package Versioning Strategy
 
 **Date**: 2026-05-15  
-**Status**: Accepted  
+**Status**: Superseded by ADR-013 (branch-to-channel mapping section only — the semver scheme below is still in effect)
 **Deciders**: Kevin Adams
 
 ## Context
@@ -57,3 +57,11 @@ Branch-to-channel mapping (not version mapping):
 - `feature_*` → alpha channel  
 - `master` → beta/testing channel  
 - Tagged release (`v3.0.0`) → stable channel
+
+> **Superseded 2026-08-30** — this branch-to-channel mapping is the section ADR-013
+> replaces. `master` stopped being maintained shortly after this was written and the
+> mapping was never updated when `release/3.x` took over as the active branch,
+> which caused a real production bug. See ADR-013 for the current, role-based
+> mapping (`main`/`next`/`release/N.x`). Left as-written above per this project's
+> ADR rule against editing an ADR's original decision text — this note is the
+> pointer forward, not a correction of the historical record.

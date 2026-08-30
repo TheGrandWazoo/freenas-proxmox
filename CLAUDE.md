@@ -42,9 +42,14 @@ Everything lives in this repo — there is no external packer repo.
 | Trigger | Version format | Cloudsmith repo |
 |---------|---------------|-----------------|
 | `v*.*.*` tag | `X.Y.Z-1` | `truenas-proxmox` (stable) |
-| `release/3.x` or `master` branch | `X.Y.Z~beta+<sha>` | `truenas-proxmox-testing` |
-| other `release/*` branches | `X.Y.Z~alpha+<sha>` | `truenas-proxmox-snapshots` |
+| `main` branch (current stable major) | `X.Y.Z~beta+<sha>` | `truenas-proxmox-testing` |
+| `next` branch (in-progress next major) | `X.Y.Z~alpha+<sha>` | `truenas-proxmox-snapshots` |
+| `release/*.x` branches (archived, superseded majors) | `X.Y.Z~alpha+<sha>` | `truenas-proxmox-snapshots` |
 | PRs / feature branches | `X.Y.Z~dev+<sha>` | not published |
+
+Branch identity is role-based, not version-numbered (see ADR-013) — `main` and `next` are fixed
+names that never get renamed at a major-version cutover; only already-superseded majors get a
+version-numbered `release/N.x` archive name. `master` no longer exists (renamed to `archive/v2-legacy`).
 
 `$VERSION` in `TrueNAS.pm` is the single source of truth. A version tag that doesn't match emits a CI warning.
 

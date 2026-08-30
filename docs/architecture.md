@@ -370,9 +370,13 @@ lint → build → security → publish
 | Git ref | Debian version string | Channel | Cloudsmith repo | GitHub Pages dist |
 |---|---|---|---|---|
 | `refs/tags/v3.0.0` | `3.0.0-1` | stable | `truenas-proxmox` | `v3` |
-| `refs/heads/master` or `refs/heads/release/3.x` | `3.0.0~beta+abc1234` | testing | `truenas-proxmox-testing` | — |
-| `refs/heads/release/*` (other) | `3.0.0~alpha+abc1234` | development | `truenas-proxmox-snapshots` | — |
+| `refs/heads/main` (current stable major) | `3.0.0~beta+abc1234` | testing | `truenas-proxmox-testing` | — |
+| `refs/heads/next` (in-progress next major) | `3.0.0~alpha+abc1234` | development | `truenas-proxmox-snapshots` | — |
+| `refs/heads/release/*.x` (archived majors) | `3.0.0~alpha+abc1234` | development | `truenas-proxmox-snapshots` | — |
 | feature branches, PRs | `3.0.0~dev+abc1234` | none | not published |
+
+Branch naming is role-based, not version-numbered — see [ADR-013](../.claude/cos/adrs/ADR-013-branching-strategy.md).
+`master` was retired (renamed to `archive/v2-legacy`) as part of that change.
 
 The tilde (`~`) in the Debian version sorts below the base version in `dpkg`, guaranteeing pre-release builds never auto-upgrade over a stable release.
 

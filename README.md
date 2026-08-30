@@ -294,7 +294,8 @@ For a full upgrade path matrix — including what to do when v4 ships — see [d
 ### Testing / Beta Release
 
 For early access to new features (may be unstable). Beta builds are published on
-every push to `release/3.x` — always the latest build, not accumulated history.
+every push to `main` (the current stable major's development branch) — always the
+latest build, not accumulated history.
 
 ```bash
 # Import the GPG key (skip if already done for the stable track)

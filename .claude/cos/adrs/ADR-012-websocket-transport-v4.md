@@ -280,20 +280,24 @@ version-specific testing this ADR's implementation work needs
 
 ## Implementation branch
 
-Development for this ADR happens on `release/4.x` (created 2026-08-29,
-branched from `release/3.x`) — CI already resolves pushes there to
-`<VERSION>~alpha+<sha>` / `truenas-proxmox-snapshots` per the existing
-`build.yml` version-bucketing logic (see ADR references below), no workflow
-changes were needed for that part. Standing it up did surface one real,
-previously-dormant CI bug worth noting here since it's a direct consequence of
-this ADR's work existing on its own branch: the "Publish to GitHub Pages
-testing dist" step ran for both `testing` and `development` channel builds and
-did `rm -rf pool/testing` first, so the first `release/4.x` push briefly
-overwrote the public testing dist with an unrelated alpha build. Fixed in
-`build.yml` (restricted that step to `channel == 'testing'` only) and verified
-live; `$VERSION` in `TrueNAS.pm` stays at the `release/3.x` value (`3.2.5`)
-until real implementation code lands here, per the branch's own alpha-channel
-versioning.
+Development for this ADR happens on the branch created 2026-08-29 as
+`release/4.x` (branched from what was then `release/3.x`) — CI resolves pushes
+there to `<VERSION>~alpha+<sha>` / `truenas-proxmox-snapshots`. Standing it up
+surfaced one real, previously-dormant CI bug worth noting here since it's a
+direct consequence of this ADR's work existing on its own branch: the
+"Publish to GitHub Pages testing dist" step ran for both `testing` and
+`development` channel builds and did `rm -rf pool/testing` first, so the first
+push to this branch briefly overwrote the public testing dist with an
+unrelated alpha build. Fixed in `build.yml` (restricted that step to
+`channel == 'testing'` only) and verified live.
+
+**2026-08-30 — renamed to `next`** as part of [ADR-013](ADR-013-branching-strategy.md)'s
+role-based branch naming: `release/N.x` names are now reserved exclusively for
+already-superseded majors, so the in-progress v4.0.0 work moved to the fixed
+name `next` (and the old `release/3.x` became `main`). Same content, same
+history, just a new name — `$VERSION` in `TrueNAS.pm` stays at the `main`
+branch's value (`3.2.5`) until real implementation code lands here, per the
+branch's own alpha-channel versioning.
 
 ## References
 
@@ -305,7 +309,8 @@ versioning.
 - [[project_truenas_lab_versions]] (test lab plan for verifying the unconfirmed items above)
 - `scripts/truenas-ws-diag.pl` (this repo — the read-only diagnostic tool used for the 2026-08-29 live verification above)
 - `docs/architecture.md` §9 (multipath's inheritance of this ADR's transport work, and the multipath docs added 2026-08-30)
-- `release/4.x` branch (implementation work for this ADR lives here; see Implementation branch above)
+- `next` branch (implementation work for this ADR lives here, renamed from `release/4.x` 2026-08-30; see Implementation branch above)
+- ADR-013 (branching strategy — role-based branch naming, why this ADR's branch was renamed)
 - `truenas/truenas_jsonrpc` (protocol spec) and `truenas/api_client` (Python reference client) on GitHub
 - [boomshankerx/proxmox-truenas](https://github.com/boomshankerx/proxmox-truenas) (independent AGPL-3.0 successor project, reference only — see Prior Art above)
 - TrueNAS Jira NAS-135643 (live 25.04.0 bug in `iscsi.target.query` over JSON-RPC)
