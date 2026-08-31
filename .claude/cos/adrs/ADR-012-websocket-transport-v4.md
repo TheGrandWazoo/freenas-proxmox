@@ -360,7 +360,23 @@ live-verified against a real TrueNAS SCALE host.** The "write path not yet
 tested" warning is fully closed — nothing about `_api_ws`'s method mapping
 remains unverified. `TrueNAS.pm`'s own header comment has been updated to
 match. This ADR's live-verification bar (Context, above) is now completely
-satisfied; whether to mark it Accepted is still Kevin's call to make.
+satisfied — **Kevin marked it Accepted 2026-08-31.**
+
+**2026-08-31 — REST-path regression check.** `_api()` becoming a dispatcher
+means every call in the file now passes through `_transport()` first,
+including on hosts that only ever used REST before this ADR — a real
+regression risk `_api_rest` itself is unchanged, but nothing had actually
+confirmed the dispatcher wrapper doesn't break it. Ran the full read/write/
+snapshot suite against `.90` (TrueNAS CORE, a real production box with
+existing VMs — `proxmox-vm-100`/`proxmox-vm-103` already in use, not a clean
+test box like `.92` was). `_transport()` correctly detected `rest`; every
+operation succeeded with zero regressions, confirmed back to the original 3
+targets and 4 volume datasets afterward with no side effects on the real
+data. CORE will never get WS support (out of scope, REST forever per #243),
+so this is the definitive regression check for that side of the dispatcher —
+no SCALE < 25.04 host currently exists in the lab to separately check that
+branch (see [[project_truenas_lab_versions]]), but the code path is identical
+regardless of which pre-25.04 condition routes there.
 
 ## References
 
