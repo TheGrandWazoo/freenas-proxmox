@@ -324,6 +324,31 @@ fell back to REST regardless of actual version. Fixed by parsing the
 `/system/version` string's major-version magnitude instead (SCALE's calendar
 versioning is unambiguously >= 24; CORE has only ever used 11.x-13.x).
 
+**2026-08-31 — write path live-tested for the first time.** Ran a full
+`alloc_image` → `path` → `volume_size_info` → `free_image` cycle against `.92`
+with a disposable fake VMID, calling the plugin module directly (not deployed
+to any Proxmox node — see the risk note in Implementation branch above). Found
+and fixed two real bugs, same "string vs integer" class of issue that's a
+running theme throughout the REST implementation:
+
+- `iscsi.target.delete` and `iscsi.targetextent.delete` were passed a raw
+  regex-captured id (a Perl string) — Pydantic rejects it without `int()`.
+- `iscsi.extent.delete(id, remove=False, force=False)` is **positional**, not
+  `(id, {force=>bool})` — REST's `{force=>true}` body was landing in position
+  2, which the API validates as a boolean field named `remove`, not `force`.
+  Fixed to unpack positionally, with `remove` always `false` (REST's DELETE
+  never asked for that — `free_image` deletes the underlying zvol separately).
+
+After the fix: a full cycle leaves zero orphaned targets, extents,
+targetextents, or datasets on TrueNAS — confirmed by querying `.92` directly
+before and after, which means `pool.dataset.create` and `pool.dataset.delete`
+are now confirmed working too (the latter's `[id, {recursive,force}]` shape,
+sourced from documented API research rather than guesswork, checked out on
+the first try). This narrows the "write path not yet tested" warning
+considerably but doesn't close it — still entirely untested: `zfs.snapshot.*`
+(create/delete/rollback/query, none of it touched by this pass). The file's
+own header warning has been narrowed to reflect this.
+
 ## References
 
 - ADR-009 (established v4.0.0 = WebSocket, this ADR is the "how")
