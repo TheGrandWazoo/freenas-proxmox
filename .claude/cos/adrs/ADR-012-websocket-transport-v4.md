@@ -344,10 +344,23 @@ targetextents, or datasets on TrueNAS — confirmed by querying `.92` directly
 before and after, which means `pool.dataset.create` and `pool.dataset.delete`
 are now confirmed working too (the latter's `[id, {recursive,force}]` shape,
 sourced from documented API research rather than guesswork, checked out on
-the first try). This narrows the "write path not yet tested" warning
-considerably but doesn't close it — still entirely untested: `zfs.snapshot.*`
-(create/delete/rollback/query, none of it touched by this pass). The file's
-own header warning has been narrowed to reflect this.
+the first try).
+
+**2026-08-31 (same day) — zfs.snapshot.* tested, write path fully closed.**
+Ran a full `volume_snapshot` → `volume_snapshot_info` → `volume_snapshot_rollback`
+→ `volume_snapshot_delete` cycle against a disposable volume on `.92`. All four
+succeeded on the first try, no param-shape bugs found — `zfs.snapshot.create`'s
+plain-object param, `zfs.snapshot.query`'s dataset filter, `zfs.snapshot.rollback`'s
+positional `(id, options)`, and `zfs.snapshot.delete`'s single positional id
+all matched what was implemented. Confirmed zero orphaned snapshots or volumes
+afterward.
+
+**Every API call this plugin makes over the WebSocket transport is now
+live-verified against a real TrueNAS SCALE host.** The "write path not yet
+tested" warning is fully closed — nothing about `_api_ws`'s method mapping
+remains unverified. `TrueNAS.pm`'s own header comment has been updated to
+match. This ADR's live-verification bar (Context, above) is now completely
+satisfied; whether to mark it Accepted is still Kevin's call to make.
 
 ## References
 
