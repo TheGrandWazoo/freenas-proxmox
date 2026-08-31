@@ -398,13 +398,13 @@ sub _api_ws {
         }
 
     } elsif ($base =~ m{^/iscsi/target/id/(.+)$}) {
-        my $id = $1;
+        my $id = int($1);
         if ($method eq 'DELETE') {
             $rpc_method = 'iscsi.target.delete';
             $params     = [$id];
         } else {
             $rpc_method = 'iscsi.target.query';
-            $params     = [[[ 'id', '=', int($id) ]], {}];
+            $params     = [[[ 'id', '=', $id ]], {}];
             $single     = 1;
         }
 
@@ -422,7 +422,11 @@ sub _api_ws {
 
     } elsif ($base =~ m{^/iscsi/targetextent/id/(.+)$}) {
         $rpc_method = 'iscsi.targetextent.delete';
-        $params     = [$1, $data // JSON::false];
+        # REST call sites pass either a bare boolean or {force=>...} as $data;
+        # iscsi.targetextent.delete(id, force=False) is positional (id, bool).
+        my $force = (ref($data) eq 'HASH') ? ($data->{force} ? JSON::true : JSON::false)
+                  : ($data ? JSON::true : JSON::false);
+        $params = [int($1), $force];
 
     } elsif ($base eq '/iscsi/extent') {
         if ($method eq 'POST') {
@@ -435,7 +439,15 @@ sub _api_ws {
 
     } elsif ($base =~ m{^/iscsi/extent/id/(.+)$}) {
         $rpc_method = 'iscsi.extent.delete';
-        $params     = [$1, $data // {}];
+        # CONFIRMED live 2026-08-31: iscsi.extent.delete(id, remove=False,
+        # force=False) is positional, NOT (id, {force=>bool}) — a {force=>...}
+        # hash in position 2 fails Pydantic validation on the "remove" field.
+        # REST's "force" concept maps to WS's 3rd positional "force"; "remove"
+        # (whether to also delete the underlying zvol/file, which the REST
+        # path never asked for since free_image deletes the dataset itself
+        # afterward) stays false.
+        my $force = (ref($data) eq 'HASH' && $data->{force}) ? JSON::true : JSON::false;
+        $params = [int($1), JSON::false, $force];
 
     } elsif ($base eq '/service/reload') {
         $rpc_method = 'service.reload';
