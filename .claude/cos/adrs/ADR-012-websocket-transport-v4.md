@@ -1,7 +1,7 @@
 # ADR-012: WebSocket JSON-RPC 2.0 Transport for v4.0.0 (Rivendell)
 
 **Date**: 2026-08-29
-**Status**: Draft — design decided and live-verified against `.91`, `.92` (25.10.x), and `.92` again on 25.04.2.6, closing the last acknowledged gap; pending Kevin's sign-off to mark Accepted
+**Status**: Accepted (2026-08-31) — design decided and fully live-verified: every read and write API call the WebSocket transport makes has been confirmed against real TrueNAS SCALE hosts (`.91`, `.92` across 25.10.x and 25.04.2.6)
 **Deciders**: Kevin Adams
 
 ## Context

@@ -34,5 +34,5 @@ ADRs document significant decisions made about this project. They follow an RFC-
 | [ADR-009](ADR-009-pve-version-support-v3.md) | PVE Version Support Matrix — v3.x and v4.0 Versioning Strategy | Accepted |
 | [ADR-010](ADR-010-apt-dist-tracks.md) | APT Repository Dist Tracks — Per-Major-Version Isolation | Accepted |
 | [ADR-011](ADR-011-apt-components-optional-features.md) | APT Components for Optional Feature Packages | Accepted |
-| [ADR-012](ADR-012-websocket-transport-v4.md) | WebSocket JSON-RPC 2.0 Transport for v4.0.0 (Rivendell) | Draft |
+| [ADR-012](ADR-012-websocket-transport-v4.md) | WebSocket JSON-RPC 2.0 Transport for v4.0.0 (Rivendell) | Accepted |
 | [ADR-013](ADR-013-branching-strategy.md) | Role-Based Branching Strategy | Accepted |
