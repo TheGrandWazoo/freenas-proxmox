@@ -16,17 +16,16 @@ package PVE::Storage::Custom::TrueNAS;
 #           plugin has no way to know for an arbitrary API key (ADR-012).
 # iSCSI:    QEMU libiscsi (iscsi:// paths) — no iscsiadm session management
 #
-# WARNING: the WebSocket transport (_api_ws, _ws_connect, _ws_call) has been
-# live-verified for every *read* (query) call this plugin makes (ADR-012,
-# four runs across three TrueNAS SCALE versions incl. 25.04.2.6), and for a
-# full alloc_image/path/volume_size_info/free_image cycle against .92
-# (2026-08-31) — zvol, extent, target, targetextent create AND delete all
-# confirmed leaving zero orphans. Two real bugs were caught and fixed doing
-# that (see ADR-012): missing int() on regex-captured ids, and
-# iscsi.extent.delete's positional (id, remove, force) signature, which is
-# NOT (id, {force=>bool}). Still entirely untested against the WS transport:
-# zfs.snapshot.* (create/delete/rollback/query) — verify before trusting
-# volume_snapshot* operations in production on SCALE 25.04+.
+# NOTE: every API call this plugin makes over the WebSocket transport
+# (_api_ws, _ws_connect, _ws_call) has been live-verified against a real
+# TrueNAS SCALE host (.92, 25.04.2.6) as of 2026-08-31 — see ADR-012 for the
+# full history. Covered: every read (query) call, a complete
+# alloc_image/path/volume_size_info/free_image cycle (target/extent/
+# targetextent/dataset create+delete, zero orphans left behind), and a full
+# snapshot cycle (volume_snapshot/_info/_rollback/_delete). Two real bugs
+# were caught and fixed along the way (see ADR-012): missing int() on
+# regex-captured ids, and iscsi.extent.delete's positional
+# (id, remove, force) signature, which is NOT (id, {force=>bool}).
 #
 # Per-VM target architecture:
 #   Each VM gets its own iSCSI target (proxmox-vm-<vmid>).
