@@ -567,7 +567,7 @@ TrueNAS SCALE 25.04 **revokes all existing API keys** that were created with whi
 
 **Additionally**, TrueNAS SCALE 25.04 enforces HTTPS for API key authentication — keys transmitted over plain HTTP are automatically revoked. Ensure **Use SSL** is enabled in your Proxmox storage config when using token auth.
 
-> **Note:** TrueNAS SCALE 25.04 also deprecates the REST API this plugin uses (v3.x, all versions to date). It still works through at least SCALE 25.10; full removal is planned for SCALE 26.x. TrueNAS CORE has no plans to remove REST. WebSocket JSON-RPC 2.0 support — needed before SCALE 26.x — is planned for **v4.0.0**, currently in design (see [ADR-012](.claude/cos/adrs/ADR-012-websocket-transport-v4.md) and [issue #243](https://github.com/TheGrandWazoo/truenas-proxmox/issues/243)).
+> **Note:** TrueNAS SCALE 25.04 also deprecates the REST API this plugin uses (v3.x, all versions to date). It still works through at least SCALE 25.10; full removal is planned for SCALE 26.x. TrueNAS CORE has no plans to remove REST. WebSocket JSON-RPC 2.0 support has been implemented and live-verified for **v4.0.0** (not yet released — in development on the `next` branch; see [ADR-012](.claude/cos/adrs/ADR-012-websocket-transport-v4.md), Accepted, and [issue #243](https://github.com/TheGrandWazoo/truenas-proxmox/issues/243)).
 
 ### Disk size in Proxmox shows larger than what I entered
 
