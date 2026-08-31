@@ -18,11 +18,15 @@ package PVE::Storage::Custom::TrueNAS;
 #
 # WARNING: the WebSocket transport (_api_ws, _ws_connect, _ws_call) has been
 # live-verified for every *read* (query) call this plugin makes (ADR-012,
-# four runs across three TrueNAS SCALE versions incl. 25.04.2.6). The
-# *write* path (create/delete/update param shapes below) follows TrueNAS's
-# documented CRUDService conventions but has NOT yet been independently
-# live-tested against a real host — verify against .91/.92 before trusting
-# alloc_image/free_image/snapshot operations in production on SCALE 25.04+.
+# four runs across three TrueNAS SCALE versions incl. 25.04.2.6), and for a
+# full alloc_image/path/volume_size_info/free_image cycle against .92
+# (2026-08-31) — zvol, extent, target, targetextent create AND delete all
+# confirmed leaving zero orphans. Two real bugs were caught and fixed doing
+# that (see ADR-012): missing int() on regex-captured ids, and
+# iscsi.extent.delete's positional (id, remove, force) signature, which is
+# NOT (id, {force=>bool}). Still entirely untested against the WS transport:
+# zfs.snapshot.* (create/delete/rollback/query) — verify before trusting
+# volume_snapshot* operations in production on SCALE 25.04+.
 #
 # Per-VM target architecture:
 #   Each VM gets its own iSCSI target (proxmox-vm-<vmid>).
