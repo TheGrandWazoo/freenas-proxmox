@@ -272,15 +272,28 @@ dynamic/development node for whatever version-specific testing comes up next
   `pool.dataset.delete` returns one) and needs `ref() eq 'HASH'` guarding.
 - #249 (per-variant dispatch) stays deferred past v4.0.0 — tracked as possible
   v4.1/v5.0 scope, see Question 2 above.
-- **`TrueNASMultipath.pm` needs no separate WebSocket work.** It calls
+- **`TrueNASMultipath.pm` needs no separate WebSocket work — CONFIRMED live
+  2026-08-31, not just by code inspection.** It calls
   `PVE::Storage::Custom::TrueNAS::_api(...)` directly (a fully-qualified sub
   call, not an overridable method) for every operation except its four
   multipath-specific overrides (`path`, `qemu_blockdev_options`,
   `activate_volume`, `deactivate_volume`, none of which touch the TrueNAS API
-  directly). Once `_api()` becomes the REST/WS dispatcher decided above,
-  multipath inherits WebSocket support automatically. Documented in
-  `docs/architecture.md` §9 (added 2026-08-30, alongside README/docs coverage
-  for the multipath package that had been missing since its v3.2.0 release).
+  directly). Ran a full `alloc_image` → `activate_volume` → `path` →
+  `deactivate_volume` → `free_image` cycle against `.92` with zero code
+  changes to `TrueNASMultipath.pm`: `iscsiadm` logged into both configured
+  portals, `multipathd` built a real `/dev/mapper/<wwid>` device with 2 active
+  paths (`multipath -ll` showed both `active ready running` under one
+  `multibus` group), and teardown cleanly flushed/logged out/removed
+  everything. Notably, TrueNAS's own `.92` only has *one* portal object
+  (listening on `0.0.0.0`) rather than the two per-IP portals the
+  CORE-vs-SCALE table in `docs/architecture.md` §9 describes as the SCALE
+  requirement — `iscsiadm` logging into two different IPs against that same
+  `0.0.0.0`-listening portal still produced two genuine, independent paths,
+  since the Linux initiator/target don't care about TrueNAS's internal
+  portal-object bookkeeping, only the actual IP:port endpoints reached.
+  Documented in `docs/architecture.md` §9 (added 2026-08-30, alongside
+  README/docs coverage for the multipath package that had been missing since
+  its v3.2.0 release; live-confirmation note added 2026-08-31).
 
 ## Implementation branch
 

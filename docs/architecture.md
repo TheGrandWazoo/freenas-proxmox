@@ -560,7 +560,7 @@ Ships as a separate package, `truenas-proxmox-multipath` (v3.2.0+, #256), becaus
 
 ### What it overrides vs. inherits
 
-Everything in §5–§6 (`alloc_image`, `free_image`, zvol/extent/target lifecycle) is **inherited unchanged** — `TrueNASMultipath.pm` calls the shared `PVE::Storage::Custom::TrueNAS::_api(...)` helper directly (a fully-qualified sub call, not a virtual method), so any future transport change to that helper (e.g. the WebSocket work in [ADR-012](../.claude/cos/adrs/ADR-012-websocket-transport-v4.md)) applies to multipath automatically with no separate implementation work.
+Everything in §5–§6 (`alloc_image`, `free_image`, zvol/extent/target lifecycle) is **inherited unchanged** — `TrueNASMultipath.pm` calls the shared `PVE::Storage::Custom::TrueNAS::_api(...)` helper directly (a fully-qualified sub call, not a virtual method), so any future transport change to that helper (e.g. the WebSocket work in [ADR-012](../.claude/cos/adrs/ADR-012-websocket-transport-v4.md)) applies to multipath automatically with no separate implementation work. **Confirmed live 2026-08-31**, not just by code inspection: a full `alloc_image`/`activate_volume`/`path`/`deactivate_volume`/`free_image` cycle against a WebSocket-transport SCALE host (`.92`, 25.04.2.6) worked with zero code changes to this file — see ADR-012's Consequences section.
 
 Only four methods are overridden, replacing the `iscsi://` model from §3 with a kernel iSCSI + `dm-multipath` model:
 
