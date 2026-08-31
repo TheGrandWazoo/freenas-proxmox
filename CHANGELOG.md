@@ -8,6 +8,53 @@ See each [GitHub Release](https://github.com/TheGrandWazoo/truenas-proxmox/relea
 
 ---
 
+## [Unreleased] — v4.0.0 (Rivendell), in development on the `next` branch
+
+Not yet released — tracked here as work lands, per this project's rule to keep
+docs current rather than batching everything into the eventual release notes.
+See [ADR-012](.claude/cos/adrs/ADR-012-websocket-transport-v4.md) (Accepted)
+for the full design and live-verification history.
+
+### Added
+- WebSocket JSON-RPC 2.0 transport for TrueNAS SCALE 25.04+ (`_api_ws`,
+  `_ws_connect`, `_ws_call`, `_transport()`), auto-detected per host —
+  `storage.cfg` is unchanged either way. TrueNAS CORE and SCALE < 25.04
+  continue to use the existing REST v2.0 transport, unmodified (#243)
+- New dependency: `libanyevent-websocket-client-perl` (pulls in
+  `libanyevent-perl`), added to `packaging/DEBIAN/control.j2` and CI's lint
+  job — only affects the `next`/v4 line, not v3.x
+
+### Verified (live, against real TrueNAS hosts)
+- Every read (query) call the plugin makes, across three TrueNAS SCALE
+  versions (25.10.3.1, 25.10.6, 25.04.2.6)
+- Full `alloc_image`/`path`/`volume_size_info`/`free_image` write cycle —
+  target, extent, targetextent, and dataset create+delete, zero orphans
+- Full snapshot cycle — `volume_snapshot`/`_info`/`_rollback`/`_delete`
+- REST-path regression check against TrueNAS CORE (a real production box) —
+  confirms the new `_api()` dispatcher doesn't break hosts that never touch
+  WebSocket
+- Multipath (`truenas-proxmox-multipath`) over the WebSocket transport —
+  zero code changes needed to `TrueNASMultipath.pm`, confirmed via a full
+  `activate_volume`/`deactivate_volume` cycle producing a real 2-path
+  `dm-multipath` device
+
+### Fixed (caught during the above verification, before ever shipping)
+- `_transport()`'s first draft checked `/system/product_type eq 'SCALE'` to
+  distinguish CORE from SCALE — that field returns the license tier (e.g.
+  `COMMUNITY_EDITION`), not the product family. Fixed to parse
+  `/system/version`'s magnitude instead
+- `iscsi.target.delete`/`iscsi.targetextent.delete` were passed a
+  regex-captured id as a string; Pydantic requires an integer
+- `iscsi.extent.delete(id, remove, force)` is positional, not
+  `(id, {force=>bool})` — the REST-style options hash was landing in the
+  `remove` slot
+
+### Known deferred
+- #249 (per-variant `TrueNAS-Core.pm`/`TrueNAS-Scale.pm` dispatch) — explicitly
+  out of scope for this release, tracked as possible v4.1/v5.0 work
+
+---
+
 ## [3.2.5] — 2026-08-23
 
 ### Fixed

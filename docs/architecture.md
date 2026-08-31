@@ -6,12 +6,13 @@
 2. [Per-VM iSCSI Target Model](#2-per-vm-iscsi-target-model)
 3. [The `iscsi://` Path Model](#3-the-iscsi-path-model)
 4. [API Flow — TrueNAS REST v2.0](#4-api-flow--truenas-rest-v20)
-5. [alloc_image Deep Dive](#5-alloc_image-deep-dive)
-6. [free_image Deep Dive](#6-free_image-deep-dive)
-7. [Build Pipeline and Version/Channel Routing](#7-build-pipeline-and-versionchannel-routing)
-8. [Debugging Guide](#8-debugging-guide)
-9. [Multipath Storage Type (`truenas-multipath`)](#9-multipath-storage-type-truenas-multipath)
-10. [Contributing](#10-contributing)
+5. [API Flow — TrueNAS WebSocket JSON-RPC 2.0 (v4.0.0+)](#5-api-flow--truenas-websocket-json-rpc-20-v400)
+6. [alloc_image Deep Dive](#6-alloc_image-deep-dive)
+7. [free_image Deep Dive](#7-free_image-deep-dive)
+8. [Build Pipeline and Version/Channel Routing](#8-build-pipeline-and-versionchannel-routing)
+9. [Debugging Guide](#9-debugging-guide)
+10. [Multipath Storage Type (`truenas-multipath`)](#10-multipath-storage-type-truenas-multipath)
+11. [Contributing](#11-contributing)
 
 ---
 
@@ -147,13 +148,20 @@ Because QEMU manages the connection itself, `activate_volume` only verifies that
 
 ### Constraints of the iscsi:// Model
 
-- **No multipath**: libiscsi in QEMU does not do multipath. If the portal is unreachable, QEMU retries but does not fail over to a second portal. Multi-portal TrueNAS setups are not effective with this model. **Solved by a separate package**: `truenas-proxmox-multipath` (shipped in v3.2.0, #256) registers a second storage type, `truenas-multipath`, that uses kernel `iscsiadm` + `dm-multipath` instead of `iscsi://` — see [§9](#9-multipath-storage-type-truenas-multipath) below.
+- **No multipath**: libiscsi in QEMU does not do multipath. If the portal is unreachable, QEMU retries but does not fail over to a second portal. Multi-portal TrueNAS setups are not effective with this model. **Solved by a separate package**: `truenas-proxmox-multipath` (shipped in v3.2.0, #256) registers a second storage type, `truenas-multipath`, that uses kernel `iscsiadm` + `dm-multipath` instead of `iscsi://` — see [§10](#10-multipath-storage-type-truenas-multipath) below.
 - **TPM disks excluded**: `swtpm` cannot use `iscsi://` URIs. Any disk assigned to a VM's TPM must be on a different storage type (e.g., local-lvm, directory).
 - **No host-visible device**: Because there is no kernel iSCSI session, tools like `lsscsi`, `iscsiadm --mode session`, or `ls /dev/disk/by-path` will not show the disk on the Proxmox host. This is expected and correct.
 
 ---
 
 ## 4. API Flow — TrueNAS REST v2.0
+
+This section covers the REST transport (`_api_rest`), used by TrueNAS CORE and
+SCALE < 25.04. As of v4.0.0, `_api()` is a thin dispatcher that routes to
+either this or the WebSocket transport (§5) based on the detected host
+version — every call site in the plugin uses the same `_api($scfg, $method,
+$path, $data)` signature shown below regardless of which one actually
+handles it.
 
 ### Authentication
 
@@ -233,7 +241,127 @@ This signals TrueNAS to reload its iSCSI configuration so the new LUN is visible
 
 ---
 
-## 5. alloc_image Deep Dive
+## 5. API Flow — TrueNAS WebSocket JSON-RPC 2.0 (v4.0.0+)
+
+TrueNAS SCALE 25.04 deprecates the REST API used in §4; SCALE 26.x removes it
+entirely. TrueNAS CORE has no such plans — it stays on REST indefinitely. This
+section covers the WebSocket JSON-RPC 2.0 transport added in v4.0.0 to keep
+the plugin working on SCALE 25.04+, and how it coexists with §4's REST path
+for CORE and older SCALE. Full design rationale and live-verification history:
+[ADR-012](../.claude/cos/adrs/ADR-012-websocket-transport-v4.md) (Accepted).
+
+### Transport auto-detection
+
+`_api()` is a dispatcher, not an implementation:
+
+```perl
+sub _api {
+    my ($scfg, $method, $path, $data) = @_;
+    return _transport($scfg) eq 'ws'
+        ? _api_ws($scfg, $method, $path, $data)
+        : _api_rest($scfg, $method, $path, $data);
+}
+```
+
+`_transport()` makes one REST call (`GET /system/version` — REST remains
+available for this purpose on every supported version) and caches the result
+per host. It distinguishes CORE from SCALE by version-string **magnitude**,
+not the `/system/product_type` endpoint — that field returns the license tier
+(`COMMUNITY_EDITION`, etc.), not the product family, and using it was a real
+bug caught during implementation (ADR-012). SCALE uses calendar versioning
+(`TrueNAS-25.04.2.6`); CORE has only ever used a small integer major
+(`TrueNAS-13.0-U6.1`). A parsed major of 24+ is unambiguously SCALE; within
+that, `>= 25.04` selects the WebSocket transport.
+
+Every call site in the plugin (`alloc_image`, `free_image`, `path`, the
+snapshot family, etc.) is unchanged — they all still call `_api($scfg,
+$method, $path, $data)` exactly as in §4, regardless of which transport
+actually handles it.
+
+### Connection and authentication
+
+`_ws_connect($scfg)` opens (and caches, per host, alongside the REST UA
+object) a single `AnyEvent::WebSocket::Client` connection to
+`wss://<host>/api/current`, used in blocking style (`->recv` on a condvar) to
+match the plugin's per-invocation lifecycle — no persistent event loop, same
+as the REST path's one-shot `LWP::UserAgent` calls.
+
+Authentication is `auth.login_with_api_key` — a single positional
+`[api_key]` param, no username needed. This is deliberately **not** the
+newer `auth.login_ex`, even though that's the more future-proof call:
+`login_ex` requires a `username` field the plugin has no way to know for an
+arbitrary API key (`storage.cfg` only ever asks for the key itself), and live
+testing found it fails unpredictably depending on which account happens to
+own a given key (ADR-012 has the full story, including a real TrueNAS
+auth-state bug hit while testing `login_ex` retries on one connection).
+
+### The JSON-RPC envelope
+
+No dedicated JSON-RPC library — the envelope is a plain hash, built and
+parsed with the same `JSON` module §4's REST path already depends on:
+
+```perl
+# Request
+{ jsonrpc => '2.0', id => $id, method => $method, params => $params // [] }
+
+# Response
+{ id => $id, result => ... }              # success
+{ id => $id, error => { code, message, data => { reason, ... } } }  # failure
+```
+
+One real Perl gotcha worth knowing before touching this code:
+`JSON`'s `decode_json` turns a JSON `true`/`false` into a blessed
+`JSON::PP::Boolean` object, not a plain `1`/`0` — `ref()` on it is truthy. A
+naive `!ref($x) || ...` truthiness check will try to hash-dereference it and
+die. Check `ref($x) eq 'HASH'` explicitly before assuming a non-hash JSON-RPC
+result is a plain scalar.
+
+### Method mapping
+
+`_api_ws` translates each REST-style `(method, path, data)` call from §4's
+endpoint table onto its JSON-RPC equivalent:
+
+| REST (§4) | JSON-RPC method |
+|---|---|
+| `GET /iscsi/global` | `iscsi.global.config` |
+| `GET /iscsi/portal` | `iscsi.portal.query` |
+| `GET`/`POST /iscsi/target` | `iscsi.target.query` / `.create` |
+| `GET`/`DELETE /iscsi/target/id/{id}` | `iscsi.target.query` (id-filtered) / `.delete` |
+| `GET`/`POST /iscsi/targetextent` | `iscsi.targetextent.query` / `.create` |
+| `DELETE /iscsi/targetextent/id/{id}` | `iscsi.targetextent.delete` — **positional** `(id, force)` |
+| `GET`/`POST /iscsi/extent` | `iscsi.extent.query` / `.create` |
+| `DELETE /iscsi/extent/id/{id}` | `iscsi.extent.delete` — **positional** `(id, remove, force)`, not `(id, {force=>bool})` |
+| `POST /service/reload` | `service.reload` |
+| `GET`/`POST /pool/dataset` | `pool.dataset.query` / `.create` |
+| `GET`/`DELETE /pool/dataset/id/{id}` | `pool.dataset.query` (id-filtered) / `.delete` — `[id, {recursive,force}]` |
+| `GET`/`POST /zfs/snapshot` | `zfs.snapshot.query` / `.create` |
+| `DELETE /zfs/snapshot/id/{id}` | `zfs.snapshot.delete` |
+| `POST /zfs/snapshot/rollback` | `zfs.snapshot.rollback` — positional `(id, options)` |
+
+The two **positional** rows are the ones that actually broke during live
+testing — `iscsi.extent.delete` in particular looks like it should take a
+REST-style options hash in position 2 (matching `pool.dataset.delete`'s real
+shape one row below it), but doesn't. Every row in this table is
+live-confirmed against a real TrueNAS SCALE host, both directions
+(create-then-delete leaves zero orphans) — see ADR-012 for the full
+verification log, including the CORE regression check that confirms this
+dispatcher doesn't affect hosts that never touch WebSocket at all.
+
+No job-polling logic is needed for any of the above — every one of these
+calls is synchronous on the TrueNAS side, confirmed both by TrueNAS's own API
+docs and by live testing.
+
+### Multipath inherits this for free
+
+`TrueNASMultipath.pm` (§10) calls `PVE::Storage::Custom::TrueNAS::_api(...)`
+directly — a fully-qualified sub call, not an overridable method — for every
+operation except its four multipath-specific overrides, none of which touch
+the TrueNAS API. It needed zero code changes to work over WebSocket, and
+this has been confirmed live, not just by inspection — see §10.
+
+---
+
+## 6. alloc_image Deep Dive
 
 `alloc_image($class, $storeid, $scfg, $vmid, $fmt, $name, $size_kb)` is called by PVE when a new virtual disk is created.
 
@@ -291,7 +419,7 @@ The current implementation does not explicitly roll back a partially-created ext
 
 ---
 
-## 6. free_image Deep Dive
+## 7. free_image Deep Dive
 
 `free_image($class, $storeid, $scfg, $volname, $isBase)` is called when a disk is deleted. The deletion order is deliberately sequenced to avoid dangling references.
 
@@ -330,7 +458,7 @@ _api($scfg, 'DELETE', "/pool/dataset/id/$enc", { recursive => JSON::true });
 
 ---
 
-## 7. Build Pipeline and Version/Channel Routing
+## 8. Build Pipeline and Version/Channel Routing
 
 ### Single-Repo Architecture (ADR-001)
 
@@ -413,7 +541,7 @@ sudo dpkg-deb -Zgzip --build dist freenas-proxmox_${VERSION}_all.deb
 
 ---
 
-## 8. Debugging Guide
+## 9. Debugging Guide
 
 ### Layer Model
 
@@ -554,13 +682,13 @@ cat /var/log/freenas-proxmox-install.log
 
 ---
 
-## 9. Multipath Storage Type (`truenas-multipath`)
+## 10. Multipath Storage Type (`truenas-multipath`)
 
 Ships as a separate package, `truenas-proxmox-multipath` (v3.2.0+, #256), because it pulls in `open-iscsi` and `multipath-tools` — dependencies the default single-path model in §3 doesn't need. `TrueNASMultipath.pm` extends `TrueNAS.pm` (`use base qw(PVE::Storage::Custom::TrueNAS)`) and registers as PVE storage type `truenas-multipath`, adding one new config field (`truenas_portals`, a comma-separated list of iSCSI portal IPs) on top of everything `TrueNAS.pm` already declares.
 
 ### What it overrides vs. inherits
 
-Everything in §5–§6 (`alloc_image`, `free_image`, zvol/extent/target lifecycle) is **inherited unchanged** — `TrueNASMultipath.pm` calls the shared `PVE::Storage::Custom::TrueNAS::_api(...)` helper directly (a fully-qualified sub call, not a virtual method), so any future transport change to that helper (e.g. the WebSocket work in [ADR-012](../.claude/cos/adrs/ADR-012-websocket-transport-v4.md)) applies to multipath automatically with no separate implementation work. **Confirmed live 2026-08-31**, not just by code inspection: a full `alloc_image`/`activate_volume`/`path`/`deactivate_volume`/`free_image` cycle against a WebSocket-transport SCALE host (`.92`, 25.04.2.6) worked with zero code changes to this file — see ADR-012's Consequences section.
+Everything in §6–§7 (`alloc_image`, `free_image`, zvol/extent/target lifecycle) is **inherited unchanged** — `TrueNASMultipath.pm` calls the shared `PVE::Storage::Custom::TrueNAS::_api(...)` helper directly (a fully-qualified sub call, not a virtual method), so any future transport change to that helper (e.g. the WebSocket work in [ADR-012](../.claude/cos/adrs/ADR-012-websocket-transport-v4.md)) applies to multipath automatically with no separate implementation work. **Confirmed live 2026-08-31**, not just by code inspection: a full `alloc_image`/`activate_volume`/`path`/`deactivate_volume`/`free_image` cycle against a WebSocket-transport SCALE host (`.92`, 25.04.2.6) worked with zero code changes to this file — see ADR-012's Consequences section.
 
 Only four methods are overridden, replacing the `iscsi://` model from §3 with a kernel iSCSI + `dm-multipath` model:
 
@@ -583,7 +711,7 @@ Live multipath failover requires the VM's disk to actually be activated (i.e., t
 
 ---
 
-## 10. Contributing
+## 11. Contributing
 
 ### Quick Iteration on a Live Proxmox Node
 
@@ -620,9 +748,9 @@ scp ui/truenas-storage.js \
 ### Branch and PR Workflow
 
 1. Open a GitHub issue before writing code
-2. Branch from `master`: `git checkout -b feature/short-description`
+2. Branch from `main` (the current stable major) or `next` (in-progress next major) — see [ADR-013](../.claude/cos/adrs/ADR-013-branching-strategy.md) for the branching model: `git checkout -b feature/short-description`
 3. Run lint locally before pushing
-4. Open a PR against `master` — CI runs lint → build → security automatically
+4. Open a PR against `main`/`next` as appropriate — CI runs lint → build → security automatically
 5. Close the issue with commit SHA and version when the change ships
 
 ### Architecture Decision Records
@@ -634,12 +762,16 @@ Major design decisions live in `.claude/cos/adrs/`. Check before making changes 
 | ADR-001 | Consolidate build pipeline into this repo; no install-time git clone |
 | ADR-002 | Full `PVE::Storage::Custom` plugin; no ZFSPlugin.pm or pvemanagerlib.js patches |
 | ADR-003 | Superseded by ADR-010 |
-| ADR-010 | GitHub Pages apt repo with per-major-version dist tracks (`v3`, `main`/`v2` for backward compat) |
 | ADR-004 | `eval {}` rollback pattern for all multi-step TrueNAS operations |
 | ADR-005 | Bearer token (API key) as primary auth; basic auth removed in v3.0 |
-| ADR-006 | `$VERSION` in `TrueNAS.pm` is the single source of truth for package versioning |
+| ADR-006 | Superseded by ADR-013 (branch-mapping section only) — semver scheme still in effect |
 | ADR-007 | v2.x keeps `FreeNAS` naming; v3.x uses `TrueNAS` everywhere |
-| ADR-008 | v3.0 supports PVE 8+ (core); PVE 9+ snapshot interface targeted for v3.1.0 |
+| ADR-008 | Superseded by ADR-009 |
+| ADR-009 | v3.1.x drops PVE 8 (PVE 9+ only); WebSocket transport work reserved for a major version bump (v4.0.0) |
+| ADR-010 | GitHub Pages apt repo with per-major-version dist tracks (`v3`, `main`/`v2` for backward compat) |
+| ADR-011 | Optional feature packages (e.g. multipath) distributed via apt components, not separate repos |
+| ADR-012 | WebSocket JSON-RPC 2.0 transport for v4.0.0 — see §5 above |
+| ADR-013 | Role-based branch naming (`main`/`next`, `release/N.x` reserved for archived majors) — see [Branch and PR Workflow](#branch-and-pr-workflow) above |
 
 ---
 
