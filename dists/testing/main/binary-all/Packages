@@ -1,13 +1,13 @@
 Package: freenas-proxmox
-Version: 3.2.5~beta+8b30a6b
+Version: 4.0.0~beta+37cae84
 Architecture: all
 Maintainer: KSA Technologies, LLC <theprofessor@ksatechnologies.com>
 Depends: truenas-proxmox (>= 3.0.0)
-Filename: pool/testing/freenas-proxmox_3.2.5~beta+8b30a6b_all.deb
-Size: 1670
-MD5sum: a080a61d00961ad1cb5b7c934d5a3112
-SHA1: e8fcd96077692ea636c9f0665463448925dc5079
-SHA256: 5f563ff4a7ef144fe13003c0faef76b8e33c9ab52df6b46c89127bbdb2429a5a
+Filename: pool/testing/freenas-proxmox_4.0.0~beta+37cae84_all.deb
+Size: 1662
+MD5sum: bfecb3c5799a566737d4dfda9a75115d
+SHA1: 16c7cba3005c6eadc8d936bf14d64fcb684a4e20
+SHA256: 4ac3afd7ea526b41b951c579deacc0ae02f3a77272042b50bb856ebb849e6147
 Section: perl
 Priority: optional
 Homepage: https://github.com/TheGrandWazoo/truenas-proxmox
@@ -21,17 +21,17 @@ Description: Transitional package — replaced by truenas-proxmox
  The freenas-proxmox package name will not exist in v4.0.
 
 Package: truenas-proxmox
-Version: 3.2.5~beta+8b30a6b
+Version: 4.0.0~beta+37cae84
 Architecture: all
 Maintainer: KSA Technologies, LLC <theprofessor@ksatechnologies.com>
-Depends: librest-client-perl, open-iscsi
+Depends: librest-client-perl, open-iscsi, libanyevent-perl, libanyevent-websocket-client-perl
 Breaks: freenas-proxmox (<< 3.0.0)
 Replaces: freenas-proxmox
-Filename: pool/testing/truenas-proxmox_3.2.5~beta+8b30a6b_all.deb
-Size: 17392
-MD5sum: 9458318c097a73b8f4184595fe262e1c
-SHA1: 71b38ce3a4592d77a534d9732cf42be16cfdf1dc
-SHA256: 149ac0e82abcc07e02030c10065502a8e2cd1da7bd9c00e1779e003ef973fe03
+Filename: pool/testing/truenas-proxmox_4.0.0~beta+37cae84_all.deb
+Size: 20996
+MD5sum: b7282e979fa3d1febf44e3b74c011850
+SHA1: 6e5e5f920f439bfa727376555bf812e3d2015fa3
+SHA256: 888675a90e7e07b6e40b4d8f2878d1bbf55815fc3492e1b04acafc805dc4765c
 Section: perl
 Priority: optional
 Homepage: https://github.com/TheGrandWazoo/truenas-proxmox
