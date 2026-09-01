@@ -164,14 +164,30 @@ Introduces the `truenas-proxmox-multipath` optional add-on package. Active-activ
 
 ---
 
-## Upcoming — v4.0.0 (WebSocket API, SCALE 25.x)
+## Released — v4.0.0 (Rivendell, WebSocket API)
 
-**Target:** After PoC testing on SCALE 25.04+  
-**Why major version:** WebSocket JSON-RPC 2.0 is a new transport — genuine architectural change.
+**Released:** 2026-08-31  
+**Branch:** `main` (promoted from `next` at cutover — `release/3.x` archives the v3.x line, per ADR-013's first-ever major-version cutover)  
+**GitHub Release:** https://github.com/TheGrandWazoo/freenas-proxmox/releases/tag/v4.0.0  
+**Why major version:** WebSocket JSON-RPC 2.0 is a new transport — genuine architectural change (ADR-009).
+
+WebSocket JSON-RPC 2.0 transport for TrueNAS SCALE 25.04+, auto-detected per host alongside the existing REST v2.0 transport (TrueNAS CORE, SCALE < 25.04) — `storage.cfg` unchanged either way. Full design and live-verification history: [ADR-012](.claude/cos/adrs/ADR-012-websocket-transport-v4.md) (Accepted).
+
+### Confirmed tested
+
+| Component | Versions |
+|-----------|---------|
+| Proxmox VE | 9.2.3 |
+| TrueNAS CORE | 13.x (REST transport regression-checked, real production host) |
+| TrueNAS SCALE | 25.10.3.1, 25.10.6, 25.04.2.6 (WebSocket transport) |
+
+### What shipped
 
 | # | Title |
 |---|-------|
-| [#243](https://github.com/TheGrandWazoo/freenas-proxmox/issues/243) | WebSocket JSON-RPC 2.0 API support (TrueNAS SCALE 25.04+) |
+| [#243](https://github.com/TheGrandWazoo/freenas-proxmox/issues/243) | WebSocket JSON-RPC 2.0 transport, auto-detected per host |
+
+Also verified as part of this release: a full `alloc_image`/`free_image`/snapshot cycle over the new transport (zero orphans), a REST-path regression check against real TrueNAS CORE, and `truenas-proxmox-multipath` working over WebSocket with zero code changes. See [CHANGELOG.md](CHANGELOG.md#400--2026-08-31--rivendell) for the full list, including two real bugs caught and fixed during live testing before ever shipping.
 
 ### Ideas under consideration (not committed)
 

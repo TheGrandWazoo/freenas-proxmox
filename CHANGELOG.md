@@ -8,12 +8,11 @@ See each [GitHub Release](https://github.com/TheGrandWazoo/truenas-proxmox/relea
 
 ---
 
-## [Unreleased] — v4.0.0 (Rivendell), in development on the `next` branch
+## [4.0.0] — 2026-08-31 — Rivendell
 
-Not yet released — tracked here as work lands, per this project's rule to keep
-docs current rather than batching everything into the eventual release notes.
 See [ADR-012](.claude/cos/adrs/ADR-012-websocket-transport-v4.md) (Accepted)
-for the full design and live-verification history.
+and [ADR-013](.claude/cos/adrs/ADR-013-branching-strategy.md) for the full
+design and live-verification history.
 
 ### Added
 - WebSocket JSON-RPC 2.0 transport for TrueNAS SCALE 25.04+ (`_api_ws`,
@@ -22,7 +21,8 @@ for the full design and live-verification history.
   continue to use the existing REST v2.0 transport, unmodified (#243)
 - New dependency: `libanyevent-websocket-client-perl` (pulls in
   `libanyevent-perl`), added to `packaging/DEBIAN/control.j2` and CI's lint
-  job — only affects the `next`/v4 line, not v3.x
+  job — only affects the v4 line (`v4`/`rivendell` apt dist), v3.x is
+  unaffected (archived at `release/3.x` per ADR-013)
 
 ### Verified (live, against real TrueNAS hosts)
 - Every read (query) call the plugin makes, across three TrueNAS SCALE
