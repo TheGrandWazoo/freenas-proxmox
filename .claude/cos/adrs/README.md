@@ -36,3 +36,4 @@ ADRs document significant decisions made about this project. They follow an RFC-
 | [ADR-011](ADR-011-apt-components-optional-features.md) | APT Components for Optional Feature Packages | Accepted |
 | [ADR-012](ADR-012-websocket-transport-v4.md) | WebSocket JSON-RPC 2.0 Transport for v4.0.0 (Rivendell) | Accepted |
 | [ADR-013](ADR-013-branching-strategy.md) | Role-Based Branching Strategy | Accepted |
+| [ADR-014](ADR-014-websocket-transport-library-change.md) | WebSocket Transport Library Change — AnyEvent → Protocol::WebSocket | Accepted |

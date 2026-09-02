@@ -18,14 +18,23 @@ package PVE::Storage::Custom::TrueNAS;
 #
 # NOTE: every API call this plugin makes over the WebSocket transport
 # (_api_ws, _ws_connect, _ws_call) has been live-verified against a real
-# TrueNAS SCALE host (.92, 25.04.2.6) as of 2026-08-31 — see ADR-012 for the
-# full history. Covered: every read (query) call, a complete
+# TrueNAS SCALE host (.92, 25.04.2.6) — see ADR-012 for the full history.
+# Covered: every read (query) call, a complete
 # alloc_image/path/volume_size_info/free_image cycle (target/extent/
 # targetextent/dataset create+delete, zero orphans left behind), and a full
-# snapshot cycle (volume_snapshot/_info/_rollback/_delete). Two real bugs
-# were caught and fixed along the way (see ADR-012): missing int() on
-# regex-captured ids, and iscsi.extent.delete's positional
-# (id, remove, force) signature, which is NOT (id, {force=>bool}).
+# snapshot cycle (volume_snapshot/_info/_rollback/_delete). Several real bugs
+# were caught and fixed along the way (see ADR-012 and ADR-014): missing
+# int() on regex-captured ids, iscsi.extent.delete's positional
+# (id, remove, force) signature (NOT (id, {force=>bool})), and — the big
+# one — the transport itself was rewritten from AnyEvent::WebSocket::Client
+# to Protocol::WebSocket + IO::Socket::SSL after a real user hit
+# "AnyEvent::CondVar: recursive blocking wait attempted" in production
+# (#290). Root cause: pveproxy/pvedaemon are themselves built on AnyEvent as
+# their core reactor, so any blocking AnyEvent ->recv() call from a plugin
+# running inside that daemon nests inside its already-running loop, which
+# AnyEvent refuses by design. See ADR-014 for the full story — this is why
+# the transport below is a plain synchronous socket client with zero
+# event-loop dependency, not a style preference.
 #
 # Per-VM target architecture:
 #   Each VM gets its own iSCSI target (proxmox-vm-<vmid>).
@@ -42,14 +51,14 @@ use LWP::UserAgent               ();
 use HTTP::Request                ();
 use URI::Escape                  qw(uri_escape uri_unescape);
 use Sys::Syslog                  qw(syslog);
-use AnyEvent                     ();
-use AnyEvent::WebSocket::Client  ();
+use IO::Socket::SSL              qw(SSL_VERIFY_NONE SSL_VERIFY_PEER);
+use Protocol::WebSocket::Client  ();
 
 use PVE::Storage::Plugin;
 
 use base qw(PVE::Storage::Plugin);
 
-our $VERSION = '4.0.0';
+our $VERSION = '4.0.1';
 
 # Per-host runtime state cache
 my $state = {};
@@ -279,16 +288,48 @@ sub _api_rest {
 
 # ── Private: WebSocket JSON-RPC 2.0 transport (TrueNAS SCALE 25.04+) ─────────
 #
-# See ADR-012 for the full design and live-verification history. Summary:
-# - AnyEvent::WebSocket::Client, used in blocking style (condvar ->recv) to
-#   match this plugin's existing per-invocation synchronous lifecycle — no
-#   persistent event loop needed, same as the LWP::UserAgent path above.
+# See ADR-012 for the original design and ADR-014 for why the transport
+# below is a plain synchronous socket client, not an AnyEvent-based one.
+# Summary:
+# - Protocol::WebSocket::Client is I/O-agnostic — it only encodes/decodes
+#   handshake and frame bytes via callbacks (write/read/connect/error); WE
+#   own a plain blocking IO::Socket::SSL and feed bytes in/out ourselves.
+#   No event loop of any kind, so no risk of nesting inside pveproxy's own
+#   AnyEvent reactor (#290 — the reason this isn't AnyEvent::WebSocket::Client
+#   anymore).
 # - Auth is auth.login_with_api_key (single positional [api_key] param) —
 #   NOT auth.login_ex, which requires a username field this plugin has no
 #   way to know for an arbitrary API key.
 # - decode_json turns JSON true/false into a blessed JSON::PP::Boolean
 #   object, not a plain 1/0 — ref() on it is truthy. Never assume a non-hash
 #   JSON-RPC result is a plain scalar without checking ref() eq 'HASH' first.
+
+# Blocks until $sock is readable (or dies on timeout), then reads whatever's
+# available and feeds it to the Protocol::WebSocket::Client state machine —
+# which synchronously invokes whichever on(...) callback the bytes complete
+# (connect, read, or error). Shared by the handshake wait and the per-call
+# response wait below.
+sub _ws_pump {
+    my ($scfg, $sock, $client, $deadline, $what) = @_;
+    my $host = $scfg->{truenas_host};
+
+    my $remaining = $deadline - time();
+    die "TrueNAS WebSocket $what to $host timed out after 30s\n" if $remaining <= 0;
+
+    my $rin = '';
+    vec($rin, fileno($sock), 1) = 1;
+    my $nfound = select(my $rout = $rin, undef, undef, $remaining);
+    die "TrueNAS WebSocket $what to $host timed out after 30s\n" unless $nfound;
+
+    my $buf;
+    my $n = $sock->sysread($buf, 65536);
+    unless (defined $n && $n > 0) {
+        delete $state->{$host}{ws};
+        die "TrueNAS WebSocket connection to $host closed unexpectedly during $what\n";
+    }
+    $client->read($buf);
+    return;
+}
 
 # Opens (and caches) an authenticated WebSocket connection for $scfg's host.
 sub _ws_connect {
@@ -299,33 +340,47 @@ sub _ws_connect {
     my $token = $state->{$host}{api_token}
         or die "TrueNAS API token not resolved for '$host'\n";
 
-    my $url    = "wss://$host/api/current";
-    my $client = AnyEvent::WebSocket::Client->new(
-        ssl_no_verify => ($scfg->{truenas_ssl_verify} // 0) ? 0 : 1,
-        timeout       => 30,
-    );
+    my $sock = IO::Socket::SSL->new(
+        PeerHost        => $host,
+        PeerPort        => 443,
+        Timeout         => 30,
+        SSL_verify_mode => ($scfg->{truenas_ssl_verify} // 0) ? SSL_VERIFY_PEER : SSL_VERIFY_NONE,
+        SSL_hostname    => $host,
+        SSL_verifycn_name => $host,
+    ) or die "TrueNAS WebSocket TCP/TLS connect to $host failed: $IO::Socket::SSL::SSL_ERROR\n";
+    $sock->autoflush(1);
+    $sock->blocking(1);
 
-    my $conn = eval { $client->connect($url)->recv };
-    die "TrueNAS WebSocket connect to $host failed: $@" if $@;
+    my $handshake_done = 0;
+    my @inbound;
+    my $client = Protocol::WebSocket::Client->new(url => "wss://$host/api/current");
+    $client->on(write => sub {
+        my (undef, $buf) = @_;
+        print { $sock } $buf;
+    });
+    $client->on(connect => sub {
+        $handshake_done = 1;
+    });
+    $client->on(read => sub {
+        my (undef, $buf) = @_;
+        push @inbound, $buf;
+    });
+    $client->on(error => sub {
+        my (undef, $err) = @_;
+        die "TrueNAS WebSocket handshake to $host failed: $err\n";
+    });
+
+    $client->connect;    # synchronously fires the 'write' callback above
+
+    my $deadline = time() + 30;
+    _ws_pump($scfg, $sock, $client, $deadline, 'handshake') until $handshake_done;
 
     $state->{$host}{ws} = {
-        conn    => $conn,
-        pending => {},
+        sock    => $sock,
+        client  => $client,
+        inbound => \@inbound,
         next_id => 1,
     };
-
-    $conn->on(each_message => sub {
-        my (undef, $message) = @_;
-        my $body = eval { decode_json($message->body) };
-        return unless $body;
-        my $id = $body->{id};
-        my $pending = $state->{$host}{ws}{pending};
-        return unless defined $id && $pending->{$id};
-        (delete $pending->{$id})->send($body);
-    });
-    $conn->on(finish => sub {
-        delete $state->{$host}{ws};
-    });
 
     my $auth = _ws_call($scfg, 'auth.login_with_api_key', [$token]);
     unless (!$auth->{error} && $auth->{result}) {
@@ -348,19 +403,25 @@ sub _ws_call {
 
     my $id  = $ws->{next_id}++;
     my $req = { jsonrpc => '2.0', id => $id, method => $method, params => $params // [] };
+    $ws->{client}->write(encode_json($req));    # frames + masks + fires 'write'
 
-    my $cv = AnyEvent->condvar;
-    $ws->{pending}{$id} = $cv;
-    $ws->{conn}->send(encode_json($req));
-
-    my $timeout_w = AnyEvent->timer(after => 30, cb => sub {
-        return unless $ws->{pending}{$id};
-        delete $ws->{pending}{$id};
-        $cv->send({ error => { message => "TrueNAS WebSocket call '$method' timed out after 30s" } });
-    });
-    my $resp = $cv->recv;
-    undef $timeout_w;
-    return $resp;
+    my $deadline = time() + 30;
+    my $result;
+    until (defined $result) {
+        while (my $msg = shift @{ $ws->{inbound} }) {
+            my $body = eval { decode_json($msg) };
+            next unless $body && defined $body->{id};
+            if ($body->{id} == $id) {
+                $result = $body;
+                last;
+            }
+            # Not our response (shouldn't normally happen in this serialized
+            # request/response pattern) — drop and keep waiting for ours.
+        }
+        _ws_pump($scfg, $ws->{sock}, $ws->{client}, $deadline, "call '$method'")
+            unless defined $result;
+    }
+    return $result;
 }
 
 # Translates a REST-style (method, path, data) call onto its JSON-RPC 2.0

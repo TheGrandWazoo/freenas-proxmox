@@ -8,6 +8,42 @@ See each [GitHub Release](https://github.com/TheGrandWazoo/truenas-proxmox/relea
 
 ---
 
+## [4.0.1] — 2026-09-01
+
+### Fixed
+- **WebSocket transport failed on every real "Add Storage" attempt against a
+  TrueNAS SCALE 25.04+ host** — `create storage failed: TrueNAS WebSocket
+  connect to ... failed: AnyEvent::CondVar: recursive blocking wait
+  attempted` (#290, reported the day after v4.0.0 shipped). Root cause:
+  `pveproxy`/`pvedaemon` are themselves built on `AnyEvent` as their core
+  reactor, so the plugin's blocking `AnyEvent::WebSocket::Client` `->recv()`
+  nested inside the daemon's own already-running event loop, which
+  `AnyEvent` refuses by design. Not a race condition — this failed on every
+  real WebUI/API use, unconditionally; v4.0.0's testing never caught it
+  because every verification script ran standalone, never inside the actual
+  daemon process. See [ADR-014](.claude/cos/adrs/ADR-014-websocket-transport-library-change.md).
+- Replaced the transport with `Protocol::WebSocket::Client` + `IO::Socket::SSL`
+  — a plain synchronous socket client with zero event-loop dependency of any
+  kind, so there's no shared reactor state to conflict with. `_api_ws`'s
+  method-mapping logic is completely unchanged; only the connection/call
+  internals (`_ws_connect`, `_ws_call`) were rewritten.
+- Fixed a `perlcritic` `RequireFinalReturn` finding surfaced while rewriting
+  `_ws_call` (unrelated to the bug itself, caught during the same pass).
+
+### Changed
+- `packaging/DEBIAN/control.j2` dependencies: `libanyevent-perl` and
+  `libanyevent-websocket-client-perl` removed; `libprotocol-websocket-perl`
+  and `libio-socket-ssl-perl` added (both apt-available on Debian trixie).
+
+### Verified
+- Full re-run of every check from v4.0.0's release (read path, write path,
+  snapshots, multipath) against the new transport — all pass, zero
+  regressions.
+- **The actual bug reproduction, re-run against the fix**: the exact
+  `POST /api2/json/storage` request that reproduced #290 via the real
+  `pveproxy`/`pvedaemon` on a lab node now returns HTTP 200 and a working,
+  `active` storage — this is the verification that matters for this release.
+
 ## [4.0.0] — 2026-08-31 — Rivendell
 
 See [ADR-012](.claude/cos/adrs/ADR-012-websocket-transport-v4.md) (Accepted)

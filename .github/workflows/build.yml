@@ -36,7 +36,7 @@ jobs:
           sudo apt-get install -y \
             shellcheck libperl-critic-perl \
             libwww-perl libio-socket-ssl-perl libjson-perl \
-            libanyevent-perl libanyevent-websocket-client-perl
+            libprotocol-websocket-perl
 
           # Stub PVE modules not available outside Proxmox hosts
           mkdir -p /tmp/pve-stub/PVE/Storage

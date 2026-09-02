@@ -1,7 +1,7 @@
 # ADR-012: WebSocket JSON-RPC 2.0 Transport for v4.0.0 (Rivendell)
 
 **Date**: 2026-08-29
-**Status**: Accepted (2026-08-31) — design decided and fully live-verified: every read and write API call the WebSocket transport makes has been confirmed against real TrueNAS SCALE hosts (`.91`, `.92` across 25.10.x and 25.04.2.6)
+**Status**: Accepted (2026-08-31) — design decided and fully live-verified: every read and write API call the WebSocket transport makes has been confirmed against real TrueNAS SCALE hosts (`.91`, `.92` across 25.10.x and 25.04.2.6). **Question 1 (library choice) superseded by [ADR-014](ADR-014-websocket-transport-library-change.md) 2026-09-01** — `AnyEvent::WebSocket::Client` broke in production (#290); everything else in this ADR stands.
 **Deciders**: Kevin Adams
 
 ## Context
@@ -147,7 +147,18 @@ Question 1 below with real-world evidence rather than a cold guess.
 
 ## Decision
 
-### Question 1: WebSocket client library — DECIDED
+### Question 1: WebSocket client library — DECIDED, then SUPERSEDED
+
+> **Superseded 2026-09-01 — see [ADR-014](ADR-014-websocket-transport-library-change.md).**
+> `AnyEvent::WebSocket::Client`'s blocking `->recv()` cannot run inside
+> `pveproxy`/`pvedaemon` (themselves built on `AnyEvent`) without nesting
+> event loops, which `AnyEvent` refuses by design — confirmed by a real user
+> (#290) on the very first real WebUI use, one day after v4.0.0 shipped. The
+> library was replaced with `Protocol::WebSocket::Client` + `IO::Socket::SSL`
+> (zero event-loop dependency). Left as-written below per this project's ADR
+> rule against editing an ADR's original decision text — this note is the
+> pointer forward, not a correction of the historical record. Every other
+> decision in this ADR (auth, method mapping, envelope) is unaffected.
 
 **`AnyEvent::WebSocket::Client`** (`libanyevent-websocket-client-perl` 0.55-1,
 apt-available on Debian trixie, depends on `libanyevent-perl` 7.170, also
