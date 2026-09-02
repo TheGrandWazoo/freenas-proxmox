@@ -91,7 +91,10 @@ implementation, against the same real hosts:
 - Full snapshot cycle (`volume_snapshot`/`_info`/`_rollback`/`_delete`) —
   pass
 - Multipath (`activate_volume`/`deactivate_volume`, real 2-path
-  `dm-multipath` device) — pass
+  `dm-multipath` device) — pass, but via a standalone test script, same as
+  every other bullet above. See the dedicated daemon-context re-check below —
+  #290's whole lesson was that standalone-script results don't prove
+  anything about behavior inside `pveproxy`/`pvedaemon`.
 - **The actual bug reproduction, re-run against the fix**: same
   `POST /api2/json/storage` request via the real `pveproxy`/`pvedaemon` on
   `pve03-hq` that previously reproduced the error — now returns HTTP 200,
@@ -99,6 +102,43 @@ implementation, against the same real hosts:
   detection and activation with no errors. This is the verification that
   actually matters for this ADR — everything else was already known-good
   from ADR-012 and was re-run to confirm the transport swap didn't regress it.
+
+### Multipath, specifically, through the real daemon (2026-09-01, follow-up)
+
+The bug reproduction above proved the fix for the base `truenas` storage type
+through the real daemon path. It did not prove anything about
+`truenas-multipath`, which shares `_ws_connect`/`_ws_call` but is a separate
+plugin (`TrueNASMultipath.pm`) with its own `activate_volume`/`iscsiadm`/
+`dm-multipath` assembly code. Leaving that on standalone-script evidence alone
+would repeat the exact gap that caused #290, so it was re-checked the same
+way:
+
+- Deployed v4.0.1's `TrueNAS.pm`/`TrueNASMultipath.pm` to `pve01-hq` (the lab
+  node with the `TrueNAS-Scale2504-Multipath` storage config against `.92`),
+  confirmed `libprotocol-websocket-perl`/`libio-socket-ssl-perl` already
+  present, restarted `pvedaemon`/`pveproxy`/`pvestatd`.
+- `GET .../storage/TrueNAS-Scale2504-Multipath/status` via real `pveproxy` →
+  HTTP 200, `active:1` — confirms `activate_storage` connects and authenticates
+  over the new transport in-daemon.
+- Allocated a real disk via `POST .../storage/.../content`, created a minimal
+  test VM (990) referencing it, started it via
+  `POST .../qemu/990/status/start` — all through real `pveproxy`/`pvedaemon`,
+  no standalone scripts anywhere in this path.
+- `multipath -ll` on `pve01-hq` showed a genuine 2-path device
+  (`36589cfc...`, paths `sde`/`sdf`, one per portal `192.168.69.92` and
+  `172.31.69.92`), and `iscsiadm -m session` showed both portal sessions
+  logged in for `vm-990`.
+- Stopped and destroyed the VM via the real API — `multipath -ll` and
+  `iscsiadm -m session` afterward show a clean teardown, no orphaned sessions
+  or devices.
+- `pve01-hq` was restored to its apt-tracked `3.2.4` build afterward (its
+  `sources.list` is still pinned to the `error`/v3 dist track — switching it
+  to `rivendell`/v4 is a separate decision, not a side effect of a
+  verification pass).
+
+Conclusion: `truenas-multipath` needed zero code or packaging changes for
+v4.0.1, and that conclusion now rests on the same daemon-context evidence
+standard as the base plugin fix, not just a standalone script.
 
 ## Consequences
 
