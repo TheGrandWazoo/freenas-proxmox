@@ -131,6 +131,14 @@ way:
 - Stopped and destroyed the VM via the real API — `multipath -ll` and
   `iscsiadm -m session` afterward show a clean teardown, no orphaned sessions
   or devices.
+  - **Correction (2026-10-04):** VM 990 (`mptest401`) and its zvol were in
+    fact still present on `pve01-hq` a month later. The session teardown
+    above was not verified with `qm config 990` / `pvesm list --vmid 990`.
+    A `qm destroy 990` on 2026-10-04 then removed the config but silently
+    skipped the disk: `TrueNASMultipath.pm`'s `path()` returns
+    `($path, $lun_id, $storeid)` instead of PVE's `($path, $owner_vmid,
+    $vtype)` contract, so `destroy_vm` reads the LUN id as the owner and
+    skips the volume. The disk was freed by calling `vdisk_free` directly.
 - `pve01-hq` was restored to its apt-tracked `3.2.4` build afterward (its
   `sources.list` is still pinned to the `error`/v3 dist track — switching it
   to `rivendell`/v4 is a separate decision, not a side effect of a
