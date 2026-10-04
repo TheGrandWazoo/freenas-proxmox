@@ -194,6 +194,7 @@ Also verified as part of this release: a full `alloc_image`/`free_image`/snapsho
 | # | Title | Notes |
 |---|-------|-------|
 | [#289](https://github.com/TheGrandWazoo/freenas-proxmox/issues/289) | UI: show installed plugin + TrueNAS version per storage | Floated 2026-08-30 alongside #243/ADR-012 work — a per-node plugin version and per-storage TrueNAS version could differ across a cluster, similar to how Ceph's panel surfaces per-node version info. Possible v4.0.0 scope, backported to v3.x if small enough. |
+| — | Nice-to-have: friendlier apt `Origin` label | PVE's Repositories panel shows our repo as `truenas-proxmox` with a generic `?` icon. The Debian/Proxmox logos are hard-coded in `proxmox-widget-toolkit` `APTRepositories.js`, so third-party repos can't get one. Optional: set the `Release` file's `Origin:` to something nicer (e.g. `KSA Technologies`) in the repo publish step. Don't override the UI renderer from `truenas-storage.js`, because that would be patching PVE core. Low priority (2026-10-04). |
 
 ---
 
