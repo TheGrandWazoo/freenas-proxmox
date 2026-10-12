@@ -985,10 +985,20 @@ sub volume_size_info {
     my ($class, $scfg, $storeid, $volname, $timeout) = @_;
     _resolve_token($storeid, $scfg);
 
+    my (undef, undef, undef, $parent, undef, undef, $format) = $class->parse_volname($volname);
+
     my $zvol = _zvol_prefix($scfg) . "/$volname";
     my $enc  = uri_escape($zvol, "^A-Za-z0-9\\-_.~");
-    my $ds   = _api($scfg, 'GET', "/pool/dataset/id/$enc") // {};
-    return $ds->{volsize}{parsed} // 0;
+    my $ds   = _api($scfg, 'GET', "/pool/dataset/id/$enc");
+    die "volume_size_info: zvol '$zvol' not found on $scfg->{truenas_host}\n"
+        unless ref $ds eq 'HASH' && defined $ds->{volsize}{parsed};
+
+    my $size = int($ds->{volsize}{parsed});
+    my $used = int($ds->{usedbydataset}{parsed} // $ds->{used}{parsed} // 0);
+
+    # List context is (size, format, used, parent), as in ZFSPoolPlugin. A bare
+    # scalar here made the content API die with "no format" (#294).
+    return wantarray ? ($size, $format, $used, $parent) : $size;
 }
 
 sub path {
