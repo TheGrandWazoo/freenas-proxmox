@@ -424,6 +424,12 @@ sub parse_volname {
         return ('images', $volname, $vmid, undef, undef, $isBase, 'raw');
     }
 
+    # Cloud-init drive: vm-<vmid>-cloudinit, or base-<vmid>-cloudinit once the
+    # VM is converted to a template. alloc_image already creates these (#294).
+    if ($volname =~ /^(vm|base)-(\d+)-cloudinit$/) {
+        return ('images', $volname, $2, undef, undef, ($1 eq 'base' ? 1 : 0), 'raw');
+    }
+
     # RAM snapshot state volume: vm-<vmid>-state-<snapname>
     # PVE allocates one of these per snapshot when "Include RAM" is selected.
     if ($volname =~ /^vm-(\d+)-state-.+$/) {
