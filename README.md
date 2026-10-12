@@ -35,6 +35,7 @@ This plugin is a native `PVE::Storage::Custom` type — Proxmox discovers it aut
 - Bearer Token (API key) authentication — no username/password, no SSH keys
 - Per-VM iSCSI targets (`proxmox-vm-<vmid>`) — removing one disk never affects other VMs
 - Automatic rollback when operations fail (no dangling iSCSI extents)
+- Disk resize, including on a running VM. Cloud-init drives are supported (v4.0.2+).
 - Supports TrueNAS CORE 13.x and TrueNAS SCALE 24.10–25.10
 
 ---
@@ -606,6 +607,18 @@ If you see iSCSI extents in TrueNAS that are not associated with any target, the
 ```bash
 perl -MPVE::Storage -e 'PVE::Storage::vdisk_free(PVE::Storage::config(), "STORAGE:vm-101-disk-0")'
 ```
+
+### Resize, disk info or cloud-init operations fail on 4.0.1 and earlier
+
+These errors come from plugin gaps that are **fixed in v4.0.2** ([#294](https://github.com/TheGrandWazoo/freenas-proxmox/issues/294)):
+
+| Error | Cause | Workaround before upgrading |
+|---|---|---|
+| `can't resize this image format` (`qm disk resize`, GUI Resize, Terraform) | No `volume_resize` | Grow the zvol in TrueNAS (Datasets → zvol → Edit → Size). Then run `qm rescan --vmid <id>` so Proxmox picks up the new size. |
+| `volume_size_info on '<volid>' failed - no format` (content API, `bpg/proxmox` Terraform refresh) | `volume_size_info` returned only a size | None. Upgrade. |
+| `unable to parse TrueNAS volume name 'vm-<id>-cloudinit'` (`qm destroy`, cloud-init regenerate) | `parse_volname` rejected cloud-init names | Remove the cloud-init drive from the VM. Then delete `vm-<id>-cloudinit` in TrueNAS along with its iSCSI extent (and the `proxmox-vm-<id>` target if it's now empty). |
+
+Resizing only grows the disk. You still need to grow the partition and filesystem inside the guest yourself (cloud-init's `growpart` does this on next boot).
 
 ### `qm destroy` left multipath disks behind on TrueNAS
 
