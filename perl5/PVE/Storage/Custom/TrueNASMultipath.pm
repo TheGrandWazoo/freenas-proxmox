@@ -95,11 +95,17 @@ sub path {
 
     PVE::Storage::Custom::TrueNAS::_resolve_token($storeid, $scfg);
 
-    my $ext = PVE::Storage::Custom::TrueNAS::_find_extent($scfg, $volname);
-    die "Volume '$volname' has no iSCSI extent on $scfg->{truenas_host}.\n" unless $ext;
-
-    my $wwid = _naa_to_wwid($ext->{naa})
-        or die "Volume '$volname' has no NAA/WWID on $scfg->{truenas_host}.\n";
+    # Orphaned zvol (no extent / no NAA): return a placeholder with the real
+    # owner and vtype so pvesm free / GUI Remove can still delete it (#292).
+    # activate_volume dies on the same condition, so it is never opened.
+    my $ext  = PVE::Storage::Custom::TrueNAS::_find_extent($scfg, $volname);
+    my $wwid = $ext ? _naa_to_wwid($ext->{naa}) : undef;
+    unless ($wwid) {
+        PVE::Storage::Custom::TrueNAS::_log('warning',
+            "multipath path: $volname has no iSCSI extent/WWID — returning placeholder path");
+        my ($vtype, undef, $ds_vmid) = $class->parse_volname($volname);
+        return ("/dev/mapper/truenas-unmapped-$volname", $ds_vmid, $vtype);
+    }
 
     return ("/dev/mapper/$wwid", $ext->{lun_id}, $storeid);
 }

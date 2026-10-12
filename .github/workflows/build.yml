@@ -74,6 +74,11 @@ jobs:
             packaging/DEBIAN-multipath/postrm
           echo "Shell scripts OK"
 
+      - name: Perl unit tests
+        run: |
+          echo "==> Running prove t/..."
+          prove -v t/
+
       - name: Test postinst/postrm service restarts
         run: |
           echo "==> Running tests/test-restart-services.sh..."
