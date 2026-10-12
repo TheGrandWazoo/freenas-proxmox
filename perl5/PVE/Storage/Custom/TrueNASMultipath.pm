@@ -57,9 +57,11 @@ sub _portals {
 }
 
 # Convert TrueNAS NAA string (e.g. "0x6589cfc...") to the dm-multipath WWID
-# used in /dev/mapper/ (e.g. "36589cfc...").
+# used in /dev/mapper/ (e.g. "36589cfc..."). Returns undef for a missing/empty
+# NAA — a bare "3" would be truthy and send callers to /dev/mapper/3.
 sub _naa_to_wwid {
     my ($naa) = @_;
+    return unless defined $naa && length $naa;
     $naa =~ s/^0x//i;
     return "3$naa";
 }
@@ -95,6 +97,11 @@ sub path {
 
     PVE::Storage::Custom::TrueNAS::_resolve_token($storeid, $scfg);
 
+    # PVE's contract is ($path, $owner_vmid, $vtype). qm destroy skips any
+    # disk whose owner != vmid, so returning the LUN id here silently
+    # orphaned every multipath disk on destroy (#291).
+    my ($vtype, undef, $ds_vmid) = $class->parse_volname($volname);
+
     # Orphaned zvol (no extent / no NAA): return a placeholder with the real
     # owner and vtype so pvesm free / GUI Remove can still delete it (#292).
     # activate_volume dies on the same condition, so it is never opened.
@@ -103,11 +110,10 @@ sub path {
     unless ($wwid) {
         PVE::Storage::Custom::TrueNAS::_log('warning',
             "multipath path: $volname has no iSCSI extent/WWID — returning placeholder path");
-        my ($vtype, undef, $ds_vmid) = $class->parse_volname($volname);
         return ("/dev/mapper/truenas-unmapped-$volname", $ds_vmid, $vtype);
     }
 
-    return ("/dev/mapper/$wwid", $ext->{lun_id}, $storeid);
+    return ("/dev/mapper/$wwid", $ds_vmid, $vtype);
 }
 
 # ── qemu_blockdev_options — delegate to Plugin.pm (host_device for /dev/mapper) ─
