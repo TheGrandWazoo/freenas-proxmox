@@ -607,6 +607,21 @@ If you see iSCSI extents in TrueNAS that are not associated with any target, the
 perl -MPVE::Storage -e 'PVE::Storage::vdisk_free(PVE::Storage::config(), "STORAGE:vm-101-disk-0")'
 ```
 
+### `qm destroy` left multipath disks behind on TrueNAS
+
+**Symptom:** you destroy a VM whose disks are on a `truenas-multipath` storage. The task reports `OK`, but the zvols, extents and the `proxmox-vm-<id>` target are still on TrueNAS. The journal has no `free_image` line for those disks.
+
+**Cause:** in multipath versions up to and including 4.0.1, `path()` returned the LUN id where Proxmox expects the owning VMID. `qm destroy` skips any disk whose owner doesn't match, so it skipped all of them without a warning. **Fixed in v4.0.2** ([#291](https://github.com/TheGrandWazoo/freenas-proxmox/issues/291)). The base `truenas` storage type was never affected.
+
+**Finding orphans:** list the storage's volumes and look for VMIDs that have no config:
+
+```bash
+pvesm list <storage>                                   # every vm-<id>-* volume on the storage
+ls /etc/pve/nodes/*/qemu-server/<id>.conf 2>/dev/null  # no output → VM no longer exists
+```
+
+To free an orphan, use `pvesm free <storage>:<vol>`. On 4.0.1 and earlier, use the `vdisk_free` one-liner from the entry above. Freeing a VM's last disk also removes its now-empty per-VM target.
+
 ### Filing a Bug Report
 
 Please use the [GitHub issue tracker](https://github.com/TheGrandWazoo/truenas-proxmox/issues) and include the [bug report template](.github/ISSUE_TEMPLATE/bug_report.md). Include relevant log lines from `syslog` (search for `FreeNAS::`).
