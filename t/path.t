@@ -66,6 +66,26 @@ subtest 'TrueNAS: qemu_blockdev_options still dies for extent-less zvol' => sub 
     like($@, qr/has no iSCSI extent/, 'qemu_blockdev_options dies');
 };
 
+# #291: qm destroy compares the owner to the VMID; the LUN id here made it skip every disk.
+subtest 'Multipath: mapped volume returns owner VMID and vtype (#291)' => sub {
+    MockTrueNAS->install(%mapped);
+    my ($path, $owner, $vtype) = $MP->path(MockTrueNAS::scfg(), 'vm-100-disk-0', 'store');
+    is($path, '/dev/mapper/36589cfc000000abc', 'path is the dm-multipath device');
+    is($owner, 100,      'owner is the VMID, not the LUN id');
+    is($vtype, 'images', 'vtype, not the storeid');
+};
+
+subtest 'Multipath: base image owner is the template VMID (#291)' => sub {
+    MockTrueNAS->install(
+        extents       => [ { id => 4, name => 'base-9000-disk-0', naa => '0x6589cfc000000def' } ],
+        targetextents => [ { id => 6, extent => 4, target => 8, lunid => 0 } ],
+        targets       => [ { id => 8, name => 'proxmox-vm-9000' } ],
+    );
+    my (undef, $owner, $vtype) = $MP->path(MockTrueNAS::scfg(), 'base-9000-disk-0', 'store');
+    is($owner, 9000,     'owner');
+    is($vtype, 'images', 'vtype');
+};
+
 subtest 'Multipath: extent-less zvol returns placeholder, not die (#292)' => sub {
     MockTrueNAS->install(extents => []);
     my ($path, $owner, $vtype) = eval { $MP->path(MockTrueNAS::scfg(), 'vm-990-disk-0', 'store') };
@@ -73,6 +93,17 @@ subtest 'Multipath: extent-less zvol returns placeholder, not die (#292)' => sub
     is($path, '/dev/mapper/truenas-unmapped-vm-990-disk-0', 'placeholder path');
     is($owner, 990,      'owner is the VMID');
     is($vtype, 'images', 'vtype');
+};
+
+subtest 'Multipath: extent with no NAA returns placeholder, not /dev/mapper/3' => sub {
+    MockTrueNAS->install(
+        extents       => [ { id => 3, name => 'vm-100-disk-0', naa => undef } ],
+        targetextents => [ { id => 5, extent => 3, target => 7, lunid => 0 } ],
+        targets       => [ { id => 7, name => 'proxmox-vm-100' } ],
+    );
+    my ($path, $owner) = $MP->path(MockTrueNAS::scfg(), 'vm-100-disk-0', 'store');
+    is($path, '/dev/mapper/truenas-unmapped-vm-100-disk-0', 'placeholder path');
+    is($owner, 100, 'owner');
 };
 
 subtest 'Multipath: activate_volume still dies for extent-less zvol' => sub {
