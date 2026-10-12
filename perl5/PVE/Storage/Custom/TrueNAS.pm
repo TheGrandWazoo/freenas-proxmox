@@ -397,6 +397,14 @@ sub _find_extent {
     };
 }
 
+# Placeholder path() result for a zvol with no mapped iSCSI extent (#292).
+# Never a usable device: the IQN segment is not a valid IQN, so anything that
+# tries to open it fails at connect time rather than hitting the wrong LUN.
+sub _unmapped_path {
+    my ($scfg, $volname) = @_;
+    return 'iscsi://' . _portal($scfg) . "/unmapped/$volname";
+}
+
 # Signal TrueNAS to reload the iSCSI service so new extents are visible
 sub _reload_iscsi {
     my ($scfg) = @_;
@@ -614,12 +622,19 @@ sub path {
     my ($class, $scfg, $volname, $storeid, $snapname) = @_;
     _resolve_token($storeid, $scfg);
 
-    my $ext = _find_extent($scfg, $volname);
-    die "Volume '$volname' has no iSCSI extent on $scfg->{truenas_host}. "
-      . "Was it created via this plugin?\n" unless $ext;
+    my ($vtype, undef, $ds_vmid) = $class->parse_volname($volname);
 
-    die "Volume '$volname' is not mapped to any iSCSI target.\n"
-        unless defined $ext->{target_id};
+    # A zvol with no extent (or an extent with no target mapping) is an orphan
+    # from a failed alloc_image, manual cleanup or the v2 era. PVE's content
+    # delete (pvesm free, GUI Remove) and qm destroy call path() only for the
+    # owner/vtype, so dying here made such orphans undeletable (#292). Return
+    # a placeholder instead — activate_volume and qemu_blockdev_options still
+    # die on the same condition, so nothing can actually run against it.
+    my $ext = _find_extent($scfg, $volname);
+    unless ($ext && defined $ext->{target_id}) {
+        _log('warning', "path: $volname has no mapped iSCSI extent — returning placeholder path");
+        return (_unmapped_path($scfg, $volname), $ds_vmid, $vtype);
+    }
 
     # Look up the target that owns this extent (per-VM or legacy shared)
     my $t        = _api($scfg, 'GET', "/iscsi/target/id/$ext->{target_id}") // {};
@@ -627,7 +642,6 @@ sub path {
     my $portal   = _portal($scfg);
     my $dev_path = "iscsi://$portal/$iqn/$ext->{lun_id}";
 
-    my ($vtype, undef, $ds_vmid) = $class->parse_volname($volname);
     return ($dev_path, $ds_vmid, $vtype);
 }
 

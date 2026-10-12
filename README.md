@@ -595,6 +595,18 @@ A quick reference:
 
 If you see iSCSI extents in TrueNAS that are not associated with any target, they can be safely deleted from the TrueNAS UI. v2.3.0 and later automatically roll back and clean up after a failed LUN creation.
 
+### `pvesm free` / GUI Remove fails with "has no iSCSI extent"
+
+**Symptom:** removing a disk fails with `Volume 'vm-101-disk-0' has no iSCSI extent on <host>. Was it created via this plugin?`. The zvol still exists on TrueNAS, but its iSCSI extent is gone. Typical causes are a failed `alloc_image`, an extent deleted by hand, or a leftover from v2.x.
+
+**Fixed in v4.0.2** ([#292](https://github.com/TheGrandWazoo/freenas-proxmox/issues/292)). `path()` now returns a placeholder for these orphans, so Proxmox can delete them normally. The task log shows `path: <vol> has no mapped iSCSI extent — returning placeholder path`. Starting a VM on such a disk still fails at `activate_volume`, as it should.
+
+**On v4.0.1 and earlier:** first confirm that no VM config references the disk (`grep -r '<vol>' /etc/pve/nodes/*/qemu-server/`). Then call `vdisk_free` directly, which skips the `path()` lookup:
+
+```bash
+perl -MPVE::Storage -e 'PVE::Storage::vdisk_free(PVE::Storage::config(), "STORAGE:vm-101-disk-0")'
+```
+
 ### Filing a Bug Report
 
 Please use the [GitHub issue tracker](https://github.com/TheGrandWazoo/truenas-proxmox/issues) and include the [bug report template](.github/ISSUE_TEMPLATE/bug_report.md). Include relevant log lines from `syslog` (search for `FreeNAS::`).
