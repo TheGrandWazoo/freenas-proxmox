@@ -534,6 +534,9 @@ sub _api_ws {
         if ($method eq 'DELETE') {
             $rpc_method = 'pool.dataset.delete';
             $params     = [$id, $data // {}];
+        } elsif ($method eq 'PUT') {
+            $rpc_method = 'pool.dataset.update';
+            $params     = [$id, $data];
         } else {
             $rpc_method = 'pool.dataset.query';
             $params     = [[[ 'id', '=', $id ]], {}];
@@ -999,6 +1002,33 @@ sub volume_size_info {
     # List context is (size, format, used, parent), as in ZFSPoolPlugin. A bare
     # scalar here made the content API die with "no format" (#294).
     return wantarray ? ($size, $format, $used, $parent) : $size;
+}
+
+# Grows the zvol. Without this override the base Plugin.pm version dies with
+# "can't resize this image format" (#294). For a running VM, qemu-server then
+# issues QMP block_resize, which makes libiscsi re-read the LUN capacity —
+# TrueNAS resizes the LUN with the zvol, so no iSCSI-side call is needed here.
+sub volume_resize {
+    my ($class, $scfg, $storeid, $volname, $size, $running, $snapname) = @_;
+    _resolve_token($storeid, $scfg);
+
+    die "resizing a snapshot is not supported\n" if $snapname;
+    $class->parse_volname($volname);    # dies on names we don't own
+
+    # Align to 1 MiB like ZFSPoolPlugin, so volsize is always a multiple of
+    # the zvol's volblocksize (TrueNAS rejects anything else).
+    my $new_kb = int($size / 1024);
+    $new_kb += (1024 - $new_kb % 1024) % 1024;
+
+    my $zvol = _zvol_prefix($scfg) . "/$volname";
+    my $enc  = uri_escape($zvol, "^A-Za-z0-9\\-_.~");
+
+    _log('info', "volume_resize: $zvol to ${new_kb}K");
+
+    # int() for a fresh IV: SCALE 25.10 Pydantic rejects string-typed integers.
+    _api($scfg, 'PUT', "/pool/dataset/id/$enc", { volsize => int($new_kb * 1024) });
+
+    return $new_kb;
 }
 
 sub path {

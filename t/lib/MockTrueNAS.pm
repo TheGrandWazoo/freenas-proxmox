@@ -66,7 +66,7 @@ sub _route {
         }
     }
 
-    return if $method eq 'DELETE' || $method eq 'POST';
+    return if $method eq 'DELETE' || $method eq 'POST' || $method eq 'PUT';
 
     die "MockTrueNAS: unhandled $method $path\n";
 }
