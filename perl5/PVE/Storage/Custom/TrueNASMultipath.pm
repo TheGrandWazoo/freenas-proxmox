@@ -116,6 +116,36 @@ sub path {
     return ("/dev/mapper/$wwid", $ds_vmid, $vtype);
 }
 
+# ── volume_resize — grow zvol, then refresh kernel view of the LUN ────────────
+
+# The base class grows the zvol. If the volume is active on this node, the
+# kernel iSCSI sessions and the dm map still report the old size, and
+# qemu-server's QMP block_resize on the host_device would fail. Rescan every
+# session to the target, then have multipathd resize the map.
+sub volume_resize {
+    my ($class, $scfg, $storeid, $volname, $size, $running, $snapname) = @_;
+
+    my $new_kb = $class->SUPER::volume_resize($scfg, $storeid, $volname, $size, $running, $snapname);
+
+    my $ext  = PVE::Storage::Custom::TrueNAS::_find_extent($scfg, $volname);
+    my $wwid = $ext ? _naa_to_wwid($ext->{naa}) : undef;
+    return $new_kb unless $wwid && -b "/dev/mapper/$wwid" && defined $ext->{target_id};
+
+    my $t   = PVE::Storage::Custom::TrueNAS::_api($scfg, 'GET',
+                  "/iscsi/target/id/$ext->{target_id}") // {};
+    my $iqn = PVE::Storage::Custom::TrueNAS::_basename($scfg) . ":$t->{name}";
+
+    my ($rc, $out) = _iscsiadm('-m', 'node', '-T', $iqn, '-R');
+    die "iscsiadm rescan of $iqn failed (rc=$rc): $out\n" if $rc;
+
+    my $multipathd = -x '/usr/sbin/multipathd' ? '/usr/sbin/multipathd' : '/sbin/multipathd';
+    system($multipathd, 'resize', 'map', $wwid) == 0
+        or die "multipathd resize map $wwid failed (rc=" . ($? >> 8) . ")\n";
+
+    PVE::Storage::Custom::TrueNAS::_log('info', "multipath resize: $wwid rescanned and resized");
+    return $new_kb;
+}
+
 # ── qemu_blockdev_options — delegate to Plugin.pm (host_device for /dev/mapper) ─
 
 # TrueNAS.pm overrides qemu_blockdev_options to return an iscsi:// blockdev —

@@ -534,6 +534,9 @@ sub _api_ws {
         if ($method eq 'DELETE') {
             $rpc_method = 'pool.dataset.delete';
             $params     = [$id, $data // {}];
+        } elsif ($method eq 'PUT') {
+            $rpc_method = 'pool.dataset.update';
+            $params     = [$id, $data];
         } else {
             $rpc_method = 'pool.dataset.query';
             $params     = [[[ 'id', '=', $id ]], {}];
@@ -791,6 +794,12 @@ sub parse_volname {
         return ('images', $volname, $vmid, undef, undef, $isBase, 'raw');
     }
 
+    # Cloud-init drive: vm-<vmid>-cloudinit, or base-<vmid>-cloudinit once the
+    # VM is converted to a template. alloc_image already creates these (#294).
+    if ($volname =~ /^(vm|base)-(\d+)-cloudinit$/) {
+        return ('images', $volname, $2, undef, undef, ($1 eq 'base' ? 1 : 0), 'raw');
+    }
+
     # RAM snapshot state volume: vm-<vmid>-state-<snapname>
     # PVE allocates one of these per snapshot when "Include RAM" is selected.
     if ($volname =~ /^vm-(\d+)-state-.+$/) {
@@ -979,10 +988,47 @@ sub volume_size_info {
     my ($class, $scfg, $storeid, $volname, $timeout) = @_;
     _resolve_token($storeid, $scfg);
 
+    my (undef, undef, undef, $parent, undef, undef, $format) = $class->parse_volname($volname);
+
     my $zvol = _zvol_prefix($scfg) . "/$volname";
     my $enc  = uri_escape($zvol, "^A-Za-z0-9\\-_.~");
-    my $ds   = _api($scfg, 'GET', "/pool/dataset/id/$enc") // {};
-    return $ds->{volsize}{parsed} // 0;
+    my $ds   = _api($scfg, 'GET', "/pool/dataset/id/$enc");
+    die "volume_size_info: zvol '$zvol' not found on $scfg->{truenas_host}\n"
+        unless ref $ds eq 'HASH' && defined $ds->{volsize}{parsed};
+
+    my $size = int($ds->{volsize}{parsed});
+    my $used = int($ds->{usedbydataset}{parsed} // $ds->{used}{parsed} // 0);
+
+    # List context is (size, format, used, parent), as in ZFSPoolPlugin. A bare
+    # scalar here made the content API die with "no format" (#294).
+    return wantarray ? ($size, $format, $used, $parent) : $size;
+}
+
+# Grows the zvol. Without this override the base Plugin.pm version dies with
+# "can't resize this image format" (#294). For a running VM, qemu-server then
+# issues QMP block_resize, which makes libiscsi re-read the LUN capacity —
+# TrueNAS resizes the LUN with the zvol, so no iSCSI-side call is needed here.
+sub volume_resize {
+    my ($class, $scfg, $storeid, $volname, $size, $running, $snapname) = @_;
+    _resolve_token($storeid, $scfg);
+
+    die "resizing a snapshot is not supported\n" if $snapname;
+    $class->parse_volname($volname);    # dies on names we don't own
+
+    # Align to 1 MiB like ZFSPoolPlugin, so volsize is always a multiple of
+    # the zvol's volblocksize (TrueNAS rejects anything else).
+    my $new_kb = int($size / 1024);
+    $new_kb += (1024 - $new_kb % 1024) % 1024;
+
+    my $zvol = _zvol_prefix($scfg) . "/$volname";
+    my $enc  = uri_escape($zvol, "^A-Za-z0-9\\-_.~");
+
+    _log('info', "volume_resize: $zvol to ${new_kb}K");
+
+    # int() for a fresh IV: SCALE 25.10 Pydantic rejects string-typed integers.
+    _api($scfg, 'PUT', "/pool/dataset/id/$enc", { volsize => int($new_kb * 1024) });
+
+    return $new_kb;
 }
 
 sub path {
