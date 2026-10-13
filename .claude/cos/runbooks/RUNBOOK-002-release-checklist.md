@@ -36,6 +36,12 @@ checklist, not infrastructure.
    section exists yet (a smaller release that wasn't tracked incrementally),
    write one now covering what actually shipped.
 
+2a. **Debian changelogs**: prepend an `X.Y.Z-1` entry to `packaging/changelog.Debian`
+   and `packaging/DEBIAN-multipath/changelog.Debian`. These are what
+   `apt changelog` shows. They fell behind during v4.0.0/4.0.1, still topped
+   at 3.2.4/3.2.2, and were caught up at v4.0.2. Check with
+   `dpkg-parsechangelog -l <file> -S Version`.
+
 3. **ROADMAP.md**: move the entry from "Upcoming" to "Released", following the
    exact pattern already established for v3.0.0/v3.1.0/v3.2.0/v4.0.0 — Released
    date, branch, GitHub Release link, "Confirmed tested" table (real versions
