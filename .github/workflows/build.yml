@@ -272,6 +272,14 @@ jobs:
           echo "==> Package info (truenas-proxmox-multipath):"
           dpkg-deb --info "${{ steps.vars.outputs.multipath_deb_file }}"
 
+          # Multipath calls the base plugin's private helpers and SUPER:: methods,
+          # so it must be pinned to the exact base version built alongside it (#299).
+          VERSION="${{ steps.vars.outputs.version }}"
+          DEPENDS="$(dpkg-deb -f "${{ steps.vars.outputs.multipath_deb_file }}" Depends)"
+          echo "==> multipath Depends: ${DEPENDS}"
+          echo "${DEPENDS}" | grep -qF "truenas-proxmox (= ${VERSION})" \
+            || { echo "::error::multipath must depend on truenas-proxmox (= ${VERSION})"; exit 1; }
+
       - name: Upload package artifacts
         uses: actions/upload-artifact@v4
         with:
