@@ -57,9 +57,11 @@ sub _portals {
 }
 
 # Convert TrueNAS NAA string (e.g. "0x6589cfc...") to the dm-multipath WWID
-# used in /dev/mapper/ (e.g. "36589cfc...").
+# used in /dev/mapper/ (e.g. "36589cfc..."). Returns undef for a missing/empty
+# NAA — a bare "3" would be truthy and send callers to /dev/mapper/3.
 sub _naa_to_wwid {
     my ($naa) = @_;
+    return unless defined $naa && length $naa;
     $naa =~ s/^0x//i;
     return "3$naa";
 }
@@ -95,13 +97,53 @@ sub path {
 
     PVE::Storage::Custom::TrueNAS::_resolve_token($storeid, $scfg);
 
-    my $ext = PVE::Storage::Custom::TrueNAS::_find_extent($scfg, $volname);
-    die "Volume '$volname' has no iSCSI extent on $scfg->{truenas_host}.\n" unless $ext;
+    # PVE's contract is ($path, $owner_vmid, $vtype). qm destroy skips any
+    # disk whose owner != vmid, so returning the LUN id here silently
+    # orphaned every multipath disk on destroy (#291).
+    my ($vtype, undef, $ds_vmid) = $class->parse_volname($volname);
 
-    my $wwid = _naa_to_wwid($ext->{naa})
-        or die "Volume '$volname' has no NAA/WWID on $scfg->{truenas_host}.\n";
+    # Orphaned zvol (no extent / no NAA): return a placeholder with the real
+    # owner and vtype so pvesm free / GUI Remove can still delete it (#292).
+    # activate_volume dies on the same condition, so it is never opened.
+    my $ext  = PVE::Storage::Custom::TrueNAS::_find_extent($scfg, $volname);
+    my $wwid = $ext ? _naa_to_wwid($ext->{naa}) : undef;
+    unless ($wwid) {
+        PVE::Storage::Custom::TrueNAS::_log('warning',
+            "multipath path: $volname has no iSCSI extent/WWID — returning placeholder path");
+        return ("/dev/mapper/truenas-unmapped-$volname", $ds_vmid, $vtype);
+    }
 
-    return ("/dev/mapper/$wwid", $ext->{lun_id}, $storeid);
+    return ("/dev/mapper/$wwid", $ds_vmid, $vtype);
+}
+
+# ── volume_resize — grow zvol, then refresh kernel view of the LUN ────────────
+
+# The base class grows the zvol. If the volume is active on this node, the
+# kernel iSCSI sessions and the dm map still report the old size, and
+# qemu-server's QMP block_resize on the host_device would fail. Rescan every
+# session to the target, then have multipathd resize the map.
+sub volume_resize {
+    my ($class, $scfg, $storeid, $volname, $size, $running, $snapname) = @_;
+
+    my $new_kb = $class->SUPER::volume_resize($scfg, $storeid, $volname, $size, $running, $snapname);
+
+    my $ext  = PVE::Storage::Custom::TrueNAS::_find_extent($scfg, $volname);
+    my $wwid = $ext ? _naa_to_wwid($ext->{naa}) : undef;
+    return $new_kb unless $wwid && -b "/dev/mapper/$wwid" && defined $ext->{target_id};
+
+    my $t   = PVE::Storage::Custom::TrueNAS::_api($scfg, 'GET',
+                  "/iscsi/target/id/$ext->{target_id}") // {};
+    my $iqn = PVE::Storage::Custom::TrueNAS::_basename($scfg) . ":$t->{name}";
+
+    my ($rc, $out) = _iscsiadm('-m', 'node', '-T', $iqn, '-R');
+    die "iscsiadm rescan of $iqn failed (rc=$rc): $out\n" if $rc;
+
+    my $multipathd = -x '/usr/sbin/multipathd' ? '/usr/sbin/multipathd' : '/sbin/multipathd';
+    system($multipathd, 'resize', 'map', $wwid) == 0
+        or die "multipathd resize map $wwid failed (rc=" . ($? >> 8) . ")\n";
+
+    PVE::Storage::Custom::TrueNAS::_log('info', "multipath resize: $wwid rescanned and resized");
+    return $new_kb;
 }
 
 # ── qemu_blockdev_options — delegate to Plugin.pm (host_device for /dev/mapper) ─

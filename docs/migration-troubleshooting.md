@@ -110,6 +110,8 @@ The v2.x plugin may not have removed these automatically. They are harmless but 
 
 Always verify a zvol is truly unused before deleting it — check `qm config` for all VMs.
 
+**Zvols on a v3/v4 `truenas` storage** that have no extent show up in `pvesm list <storage>`. From v4.0.2 you can delete them with `pvesm free <storage>:<vol>` or the GUI's Remove button. On older versions that fails with "has no iSCSI extent"; see the README troubleshooting entry for the `vdisk_free` workaround ([#292](https://github.com/TheGrandWazoo/freenas-proxmox/issues/292)).
+
 ---
 
 ## Old v2.x storage can't be removed from Proxmox

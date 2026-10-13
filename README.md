@@ -35,6 +35,7 @@ This plugin is a native `PVE::Storage::Custom` type — Proxmox discovers it aut
 - Bearer Token (API key) authentication — no username/password, no SSH keys
 - Per-VM iSCSI targets (`proxmox-vm-<vmid>`) — removing one disk never affects other VMs
 - Automatic rollback when operations fail (no dangling iSCSI extents)
+- Disk resize, including on a running VM. Cloud-init drives are supported (v3.2.6+ / v4.0.2+).
 - Supports TrueNAS CORE 13.x and TrueNAS SCALE 24.10–25.10
 
 ---
@@ -357,7 +358,7 @@ sudo apt update && sudo apt install truenas-proxmox-multipath
 
 </details>
 
-This installs `open-iscsi` and `multipath-tools` as dependencies and registers the `truenas-multipath` storage type. See [Configuration → Multipath Storage](#multipath-storage) for the extra field it needs, and [docs/architecture.md](docs/architecture.md) for how it differs from the default single-path `iscsi://` model.
+This installs `open-iscsi` and `multipath-tools` as dependencies and registers the `truenas-multipath` storage type. From v3.2.6 (and v4.0.2) on, the package requires the **exact same version** of `truenas-proxmox`, so apt always upgrades (or holds) the two together ([#299](https://github.com/TheGrandWazoo/freenas-proxmox/issues/299)). See [Configuration → Multipath Storage](#multipath-storage) for the extra field it needs, and [docs/architecture.md](docs/architecture.md) for how it differs from the default single-path `iscsi://` model.
 
 ---
 
@@ -594,6 +595,60 @@ A quick reference:
 ### Dangling extents on TrueNAS after a failed operation
 
 If you see iSCSI extents in TrueNAS that are not associated with any target, they can be safely deleted from the TrueNAS UI. v2.3.0 and later automatically roll back and clean up after a failed LUN creation.
+
+### `pvesm free` / GUI Remove fails with "has no iSCSI extent"
+
+**Symptom:** removing a disk fails with `Volume 'vm-101-disk-0' has no iSCSI extent on <host>. Was it created via this plugin?`. The zvol still exists on TrueNAS, but its iSCSI extent is gone. Typical causes are a failed `alloc_image`, an extent deleted by hand, or a leftover from v2.x.
+
+**Fixed in v3.2.6** (and v4.0.2) ([#292](https://github.com/TheGrandWazoo/freenas-proxmox/issues/292)). `path()` now returns a placeholder for these orphans, so Proxmox can delete them normally. The task log shows `path: <vol> has no mapped iSCSI extent — returning placeholder path`. Starting a VM on such a disk still fails at `activate_volume`, as it should.
+
+**On v3.2.5 and earlier:** first confirm that no VM config references the disk (`grep -r '<vol>' /etc/pve/nodes/*/qemu-server/`). Then call `vdisk_free` directly, which skips the `path()` lookup:
+
+```bash
+perl -MPVE::Storage -e 'PVE::Storage::vdisk_free(PVE::Storage::config(), "STORAGE:vm-101-disk-0")'
+```
+
+### Resize, disk info or cloud-init operations fail on 3.2.5 and earlier
+
+These errors come from plugin gaps that are **fixed in v3.2.6** (and v4.0.2) ([#294](https://github.com/TheGrandWazoo/freenas-proxmox/issues/294)):
+
+| Error | Cause | Workaround before upgrading |
+|---|---|---|
+| `can't resize this image format` (`qm disk resize`, GUI Resize, Terraform) | No `volume_resize` | Grow the zvol in TrueNAS (Datasets → zvol → Edit → Size). Then run `qm rescan --vmid <id>` so Proxmox picks up the new size. |
+| `volume_size_info on '<volid>' failed - no format` (content API, `bpg/proxmox` Terraform refresh) | `volume_size_info` returned only a size | None. Upgrade. |
+| `unable to parse TrueNAS volume name 'vm-<id>-cloudinit'` (`qm destroy`, cloud-init regenerate) | `parse_volname` rejected cloud-init names | Remove the cloud-init drive from the VM. Then delete `vm-<id>-cloudinit` in TrueNAS along with its iSCSI extent (and the `proxmox-vm-<id>` target if it's now empty). |
+
+Resizing only grows the disk. You still need to grow the partition and filesystem inside the guest yourself (cloud-init's `growpart` does this on next boot).
+
+### `qm cloudinit update` on a running VM fails with "Tray of the device is not open" (v3.x + TrueNAS SCALE)
+
+**Symptom:** `qm cloudinit update <vmid>` (or **Cloud-Init → Regenerate Image** in the GUI) on a **running** VM fails with:
+
+```
+VM <vmid> qmp command 'blockdev-insert-medium' failed - Tray of the device is not open
+```
+
+**Cause:** to swap the cloud-init CD in a running VM, PVE opens the virtual tray, removes the old disc, asks the plugin for the new disc's iSCSI path, and inserts it. v3.x reaches TrueNAS SCALE over the REST API, which SCALE 25.x has deprecated and serves slowly. Measured from a PVE node, `GET /iscsi/extent` took about 0.8 s on SCALE 25.04 and about 3.1 s on 25.10, compared with 0.09 s on CORE 13. The plugin makes about six such calls while PVE is attaching the new disc. That's long enough for the guest to close the tray before the insert. TrueNAS CORE is fast enough not to hit this, and so is v4.x's WebSocket transport for SCALE 25.04+.
+
+**Workarounds:**
+- Run the command again. The second attempt usually succeeds.
+- Or regenerate while the VM is stopped. PVE also regenerates the cloud-init drive automatically at every VM start.
+- Or move to v4.x on PVE 9 ([upgrade path](docs/upgrade-paths.md)), which uses the much faster WebSocket API for SCALE 25.04+.
+
+### `qm destroy` left multipath disks behind on TrueNAS
+
+**Symptom:** you destroy a VM whose disks are on a `truenas-multipath` storage. The task reports `OK`, but the zvols, extents and the `proxmox-vm-<id>` target are still on TrueNAS. The journal has no `free_image` line for those disks.
+
+**Cause:** in multipath versions up to and including 3.2.5 (and 4.0.1), `path()` returned the LUN id where Proxmox expects the owning VMID. `qm destroy` skips any disk whose owner doesn't match, so it skipped all of them without a warning. **Fixed in v3.2.6** (and v4.0.2) ([#291](https://github.com/TheGrandWazoo/freenas-proxmox/issues/291)). The base `truenas` storage type was never affected.
+
+**Finding orphans:** list the storage's volumes and look for VMIDs that have no config:
+
+```bash
+pvesm list <storage>                                   # every vm-<id>-* volume on the storage
+ls /etc/pve/nodes/*/qemu-server/<id>.conf 2>/dev/null  # no output → VM no longer exists
+```
+
+To free an orphan, use `pvesm free <storage>:<vol>`. On 3.2.5 and earlier, use the `vdisk_free` one-liner from the entry above. Freeing a VM's last disk also removes its now-empty per-VM target.
 
 ### Filing a Bug Report
 
