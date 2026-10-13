@@ -55,7 +55,7 @@ version-numbered `release/N.x` archive name. `master` no longer exists (renamed 
 
 ## Authentication
 
-- **Bearer Token** (required): `truenas_api_token` — set in PVE storage config
+- **Bearer Token** (required): `truenas_api_key` in PVE storage config, or `/etc/pve/priv/truenas-<storeid>.key` (preferred, #261)
 
 Basic auth (`freenas_user` / `freenas_password`) was removed in v3.0. Bearer token is the only supported mode.
 
