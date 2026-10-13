@@ -358,7 +358,7 @@ sudo apt update && sudo apt install truenas-proxmox-multipath
 
 </details>
 
-This installs `open-iscsi` and `multipath-tools` as dependencies and registers the `truenas-multipath` storage type. See [Configuration → Multipath Storage](#multipath-storage) for the extra field it needs, and [docs/architecture.md](docs/architecture.md) for how it differs from the default single-path `iscsi://` model.
+This installs `open-iscsi` and `multipath-tools` as dependencies and registers the `truenas-multipath` storage type. From v4.0.2 on, the package requires the **exact same version** of `truenas-proxmox`, so apt always upgrades (or holds) the two together ([#299](https://github.com/TheGrandWazoo/freenas-proxmox/issues/299)). See [Configuration → Multipath Storage](#multipath-storage) for the extra field it needs, and [docs/architecture.md](docs/architecture.md) for how it differs from the default single-path `iscsi://` model.
 
 ---
 
