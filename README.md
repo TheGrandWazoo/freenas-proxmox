@@ -620,6 +620,21 @@ These errors come from plugin gaps that are **fixed in v3.2.6** (and v4.0.2) ([#
 
 Resizing only grows the disk. You still need to grow the partition and filesystem inside the guest yourself (cloud-init's `growpart` does this on next boot).
 
+### `qm cloudinit update` on a running VM fails with "Tray of the device is not open" (v3.x + TrueNAS SCALE)
+
+**Symptom:** `qm cloudinit update <vmid>` (or **Cloud-Init → Regenerate Image** in the GUI) on a **running** VM fails with:
+
+```
+VM <vmid> qmp command 'blockdev-insert-medium' failed - Tray of the device is not open
+```
+
+**Cause:** to swap the cloud-init CD in a running VM, PVE opens the virtual tray, removes the old disc, asks the plugin for the new disc's iSCSI path, and inserts it. v3.x reaches TrueNAS SCALE over the REST API, which SCALE 25.x has deprecated and serves slowly. Measured from a PVE node, `GET /iscsi/extent` took about 0.8 s on SCALE 25.04 and about 3.1 s on 25.10, compared with 0.09 s on CORE 13. The plugin makes about six such calls while PVE is attaching the new disc. That's long enough for the guest to close the tray before the insert. TrueNAS CORE is fast enough not to hit this, and so is v4.x's WebSocket transport for SCALE 25.04+.
+
+**Workarounds:**
+- Run the command again. The second attempt usually succeeds.
+- Or regenerate while the VM is stopped. PVE also regenerates the cloud-init drive automatically at every VM start.
+- Or move to v4.x on PVE 9 ([upgrade path](docs/upgrade-paths.md)), which uses the much faster WebSocket API for SCALE 25.04+.
+
 ### `qm destroy` left multipath disks behind on TrueNAS
 
 **Symptom:** you destroy a VM whose disks are on a `truenas-multipath` storage. The task reports `OK`, but the zvols, extents and the `proxmox-vm-<id>` target are still on TrueNAS. The journal has no `free_image` line for those disks.

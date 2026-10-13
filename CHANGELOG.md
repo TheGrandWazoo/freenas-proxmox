@@ -41,6 +41,25 @@ transport only). `storage.cfg` is unchanged. It requires PVE 9, like every v3.1+
   WebSocket transport. SCALE 25.04+ still accepts REST through 25.10. Move to
   v4 before SCALE 26.x removes it.
 
+### Known limitation
+- On TrueNAS SCALE, `qm cloudinit update` on a **running** VM can fail with
+  `blockdev-insert-medium ... Tray of the device is not open`. SCALE's REST
+  API is slow (about 0.8 s per call on 25.04 and 3.1 s on 25.10, compared with
+  0.09 s on CORE). The guest closes the virtual tray before PVE can insert the
+  regenerated disc. Retrying, or regenerating while the VM is stopped, works.
+  v4.x over WebSocket does not hit this. See the README troubleshooting entry.
+
+### Verified (live, PVE 9.2.21, pve01, 3.2.6 dev build)
+- Full cycle on CORE 13.0-U6.8, SCALE 25.10.6, SCALE 25.04.2.6 and multipath
+  on 25.04.2.6, all over REST:
+  - create with a cloud-init drive;
+  - resize +1G while stopped;
+  - start;
+  - resize +1G while running (QEMU sees 3 GiB);
+  - `qm destroy --purge`, leaving no orphans and no iSCSI sessions.
+- Online `qm cloudinit update` passed on CORE. On the three SCALE storages it
+  hit the known limitation above, and succeeded on retry.
+
 ## [Unreleased] — v4.0.0 (Rivendell), in development on the `next` branch
 
 Not yet released — tracked here as work lands, per this project's rule to keep
