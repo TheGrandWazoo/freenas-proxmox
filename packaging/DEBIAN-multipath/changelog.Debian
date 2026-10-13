@@ -1,3 +1,14 @@
+truenas-proxmox-multipath (3.2.6-1) trixie; urgency=medium
+
+  * volume_resize: rescan kernel iSCSI sessions and multipathd resize map
+    so running VMs see the grown disk (#294)
+  * path() returns the owner VMID and vtype; qm destroy no longer silently
+    orphans multipath disks (#291)
+  * _naa_to_wwid(undef) returns undef instead of "3" (#291)
+  * Depend on the exact same truenas-proxmox version (#299)
+
+ -- KSA Technologies, LLC <theprofessor@ksatechnologies.com>  Tue, 13 Oct 2026 00:00:00 +0000
+
 truenas-proxmox-multipath (3.2.2-1) bookworm; urgency=low
 
   * Version bump to match truenas-proxmox 3.2.2; api() fix inherited from TrueNAS.pm

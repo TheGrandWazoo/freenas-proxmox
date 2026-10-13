@@ -8,6 +8,39 @@ See each [GitHub Release](https://github.com/TheGrandWazoo/truenas-proxmox/relea
 
 ---
 
+## [3.2.6] — 2026-10-13
+
+Backport of the v4.0.2 volume lifecycle fixes to the v3.x line (REST
+transport only). `storage.cfg` is unchanged. It requires PVE 9, like every v3.1+ release.
+
+### Added
+- **Disk resize** (`volume_resize`) for `truenas` and `truenas-multipath`,
+  including on running VMs (#294). The zvol is grown through
+  `PUT /pool/dataset/id/<zvol>`, aligned to 1 MiB with an integer `volsize`.
+  Multipath also rescans the kernel sessions and runs `multipathd resize map`.
+- Perl unit-test harness (`t/`, mock TrueNAS API), run by `prove` in the CI
+  lint job (#292).
+
+### Fixed
+- Cloud-init drives: `parse_volname` accepts `vm-N-cloudinit` /
+  `base-N-cloudinit` (#294).
+- `volume_size_info` in list context returns `(size, format, used, parent)`,
+  which fixes the content API and Terraform `no format` error (#294).
+- `path()` returns a placeholder for zvols with no iSCSI extent, so orphans
+  can be freed through PVE again (#292).
+- Multipath `path()` returns the owner VMID and vtype, so `qm destroy` no
+  longer silently leaves multipath disks on TrueNAS. `_naa_to_wwid(undef)`
+  now returns undef (#291).
+
+### Changed
+- `truenas-proxmox-multipath` depends on the exact same `truenas-proxmox`
+  version (#299).
+
+### Not backported
+- The WebSocket `PUT` → `pool.dataset.update` mapping, because v3.x has no
+  WebSocket transport. SCALE 25.04+ still accepts REST through 25.10. Move to
+  v4 before SCALE 26.x removes it.
+
 ## [Unreleased] — v4.0.0 (Rivendell), in development on the `next` branch
 
 Not yet released — tracked here as work lands, per this project's rule to keep

@@ -1,3 +1,15 @@
+truenas-proxmox (3.2.6-1) trixie; urgency=medium
+
+  * Backport of v4.0.2 volume lifecycle fixes (REST transport only)
+  * Add volume_resize so qm disk resize works, including on running VMs (#294)
+  * parse_volname accepts vm-N-cloudinit / base-N-cloudinit (#294)
+  * volume_size_info returns (size, format, used, parent) in list context;
+    fixes content API "no format" (#294)
+  * path() returns a placeholder for extent-less zvols so orphans can be
+    freed through PVE (#292)
+
+ -- KSA Technologies, LLC <theprofessor@ksatechnologies.com>  Tue, 13 Oct 2026 00:00:00 +0000
+
 truenas-proxmox (3.2.4-1) bookworm; urgency=medium
 
   * Fix postinst/postrm to also restart pvestatd, pve-ha-lrm, pve-ha-crm on

@@ -35,7 +35,7 @@ This plugin is a native `PVE::Storage::Custom` type — Proxmox discovers it aut
 - Bearer Token (API key) authentication — no username/password, no SSH keys
 - Per-VM iSCSI targets (`proxmox-vm-<vmid>`) — removing one disk never affects other VMs
 - Automatic rollback when operations fail (no dangling iSCSI extents)
-- Disk resize, including on a running VM. Cloud-init drives are supported (v4.0.2+).
+- Disk resize, including on a running VM. Cloud-init drives are supported (v3.2.6+ / v4.0.2+).
 - Supports TrueNAS CORE 13.x and TrueNAS SCALE 24.10–25.10
 
 ---
@@ -358,7 +358,7 @@ sudo apt update && sudo apt install truenas-proxmox-multipath
 
 </details>
 
-This installs `open-iscsi` and `multipath-tools` as dependencies and registers the `truenas-multipath` storage type. From v4.0.2 on, the package requires the **exact same version** of `truenas-proxmox`, so apt always upgrades (or holds) the two together ([#299](https://github.com/TheGrandWazoo/freenas-proxmox/issues/299)). See [Configuration → Multipath Storage](#multipath-storage) for the extra field it needs, and [docs/architecture.md](docs/architecture.md) for how it differs from the default single-path `iscsi://` model.
+This installs `open-iscsi` and `multipath-tools` as dependencies and registers the `truenas-multipath` storage type. From v3.2.6 (and v4.0.2) on, the package requires the **exact same version** of `truenas-proxmox`, so apt always upgrades (or holds) the two together ([#299](https://github.com/TheGrandWazoo/freenas-proxmox/issues/299)). See [Configuration → Multipath Storage](#multipath-storage) for the extra field it needs, and [docs/architecture.md](docs/architecture.md) for how it differs from the default single-path `iscsi://` model.
 
 ---
 
@@ -600,17 +600,17 @@ If you see iSCSI extents in TrueNAS that are not associated with any target, the
 
 **Symptom:** removing a disk fails with `Volume 'vm-101-disk-0' has no iSCSI extent on <host>. Was it created via this plugin?`. The zvol still exists on TrueNAS, but its iSCSI extent is gone. Typical causes are a failed `alloc_image`, an extent deleted by hand, or a leftover from v2.x.
 
-**Fixed in v4.0.2** ([#292](https://github.com/TheGrandWazoo/freenas-proxmox/issues/292)). `path()` now returns a placeholder for these orphans, so Proxmox can delete them normally. The task log shows `path: <vol> has no mapped iSCSI extent — returning placeholder path`. Starting a VM on such a disk still fails at `activate_volume`, as it should.
+**Fixed in v3.2.6** (and v4.0.2) ([#292](https://github.com/TheGrandWazoo/freenas-proxmox/issues/292)). `path()` now returns a placeholder for these orphans, so Proxmox can delete them normally. The task log shows `path: <vol> has no mapped iSCSI extent — returning placeholder path`. Starting a VM on such a disk still fails at `activate_volume`, as it should.
 
-**On v4.0.1 and earlier:** first confirm that no VM config references the disk (`grep -r '<vol>' /etc/pve/nodes/*/qemu-server/`). Then call `vdisk_free` directly, which skips the `path()` lookup:
+**On v3.2.5 and earlier:** first confirm that no VM config references the disk (`grep -r '<vol>' /etc/pve/nodes/*/qemu-server/`). Then call `vdisk_free` directly, which skips the `path()` lookup:
 
 ```bash
 perl -MPVE::Storage -e 'PVE::Storage::vdisk_free(PVE::Storage::config(), "STORAGE:vm-101-disk-0")'
 ```
 
-### Resize, disk info or cloud-init operations fail on 4.0.1 and earlier
+### Resize, disk info or cloud-init operations fail on 3.2.5 and earlier
 
-These errors come from plugin gaps that are **fixed in v4.0.2** ([#294](https://github.com/TheGrandWazoo/freenas-proxmox/issues/294)):
+These errors come from plugin gaps that are **fixed in v3.2.6** (and v4.0.2) ([#294](https://github.com/TheGrandWazoo/freenas-proxmox/issues/294)):
 
 | Error | Cause | Workaround before upgrading |
 |---|---|---|
@@ -624,7 +624,7 @@ Resizing only grows the disk. You still need to grow the partition and filesyste
 
 **Symptom:** you destroy a VM whose disks are on a `truenas-multipath` storage. The task reports `OK`, but the zvols, extents and the `proxmox-vm-<id>` target are still on TrueNAS. The journal has no `free_image` line for those disks.
 
-**Cause:** in multipath versions up to and including 4.0.1, `path()` returned the LUN id where Proxmox expects the owning VMID. `qm destroy` skips any disk whose owner doesn't match, so it skipped all of them without a warning. **Fixed in v4.0.2** ([#291](https://github.com/TheGrandWazoo/freenas-proxmox/issues/291)). The base `truenas` storage type was never affected.
+**Cause:** in multipath versions up to and including 3.2.5 (and 4.0.1), `path()` returned the LUN id where Proxmox expects the owning VMID. `qm destroy` skips any disk whose owner doesn't match, so it skipped all of them without a warning. **Fixed in v3.2.6** (and v4.0.2) ([#291](https://github.com/TheGrandWazoo/freenas-proxmox/issues/291)). The base `truenas` storage type was never affected.
 
 **Finding orphans:** list the storage's volumes and look for VMIDs that have no config:
 
@@ -633,7 +633,7 @@ pvesm list <storage>                                   # every vm-<id>-* volume 
 ls /etc/pve/nodes/*/qemu-server/<id>.conf 2>/dev/null  # no output → VM no longer exists
 ```
 
-To free an orphan, use `pvesm free <storage>:<vol>`. On 4.0.1 and earlier, use the `vdisk_free` one-liner from the entry above. Freeing a VM's last disk also removes its now-empty per-VM target.
+To free an orphan, use `pvesm free <storage>:<vol>`. On 3.2.5 and earlier, use the `vdisk_free` one-liner from the entry above. Freeing a VM's last disk also removes its now-empty per-VM target.
 
 ### Filing a Bug Report
 
