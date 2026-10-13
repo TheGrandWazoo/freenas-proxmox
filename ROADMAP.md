@@ -201,6 +201,42 @@ Also verified as part of this release: a full `alloc_image`/`free_image`/snapsho
 
 ---
 
+## Released — v4.0.2 (Volume lifecycle fixes)
+
+**Released:** 2026-10-13  
+**Branch:** `main`  
+**GitHub Release:** https://github.com/TheGrandWazoo/freenas-proxmox/releases/tag/v4.0.2  
+**Backport:** v3.2.6 on `release/3.x` (REST only, multipath included)
+
+Closes the volume-lifecycle gaps found while running real workloads (Terraform cloud-image provisioning, orphan cleanup after the cluster's PVE 9 upgrade): disk resize, cloud-init drives, content-API sizing, deletable orphans, and multipath `qm destroy`. Also adds the first unit-test harness (`t/` + `prove` in CI).
+
+### Confirmed tested
+
+| Component | Versions |
+|-----------|---------|
+| Proxmox VE | 9.2.21 |
+| TrueNAS CORE | 13.0-U6.8 (REST transport) |
+| TrueNAS SCALE | 25.04.2.6, 25.10.6 (WebSocket transport); multipath on 25.04.2.6 with two portals |
+
+### What shipped
+
+| # | Title | Commit |
+|---|-------|--------|
+| [#292](https://github.com/TheGrandWazoo/freenas-proxmox/issues/292) | `path()` placeholder for extent-less zvols — orphans deletable via PVE | f5e625a |
+| [#291](https://github.com/TheGrandWazoo/freenas-proxmox/issues/291) | Multipath `path()` returns owner VMID — `qm destroy` no longer orphans disks | 8c919d1 |
+| [#294](https://github.com/TheGrandWazoo/freenas-proxmox/issues/294) | `volume_resize`, cloud-init volnames, list-context `volume_size_info` | 83bda13 |
+| [#293](https://github.com/TheGrandWazoo/freenas-proxmox/issues/293) | Docs: real v3→v4 upgrade path; PVE 8 pin to 3.0.0-1 | 615d779 |
+| [#299](https://github.com/TheGrandWazoo/freenas-proxmox/issues/299) | Multipath depends on the exact base package version | e40d6d8 |
+
+### Ideas under consideration (not committed)
+
+| # | Title | Notes |
+|---|-------|-------|
+| — | Multipath: degrade instead of fail when one of N portals is down | Seen in the #294 lab test (2026-10-12): one unreachable portal made `activate_volume` fail outright. Should it log in on the remaining paths and warn? |
+| — | Multipath: quieter `deactivate_volume` | `qm stop` prints `iscsiadm: No matching sessions found` / `No records found`. Harmless, but noisy. |
+
+---
+
 ## Process Rules
 
 - Every business decision (defer, hold, change scope) is recorded here **and** as a comment on the relevant GitHub issue — not only in conversation or AI memory.

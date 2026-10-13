@@ -8,6 +8,72 @@ See each [GitHub Release](https://github.com/TheGrandWazoo/truenas-proxmox/relea
 
 ---
 
+## [4.0.2] — 2026-10-13
+
+Volume lifecycle fixes. Every change is backward compatible and `storage.cfg` is unchanged.
+Milestone: *v4.0.2 — Volume lifecycle fixes*.
+
+### Added
+- **Disk resize** (`volume_resize`) for `truenas` and `truenas-multipath` (#294).
+  Before this, the base `Plugin.pm` died with `can't resize this image format`.
+  That blocked `qm disk resize`, the GUI, and Terraform cloud-image provisioning.
+  - The zvol is grown through the pool/dataset update API, aligned to 1 MiB and
+    sent as an integer `volsize` (required by SCALE's validation).
+  - The WebSocket transport gains the `PUT` → `pool.dataset.update` mapping.
+  - Multipath also rescans the target's kernel iSCSI sessions and runs
+    `multipathd resize map` when the device is active, so the QMP
+    `block_resize` on a running VM can grow past the old dm size.
+- First Perl unit-test harness (`t/`, a mock TrueNAS API plus a PVE plugin stub),
+  run by `prove` in the CI lint job (#292).
+
+### Fixed
+- **Cloud-init drives**: `parse_volname` now accepts `vm-N-cloudinit` and
+  `base-N-cloudinit` (#294). `alloc_image` already created them, but every later
+  operation, including `qm destroy`, died with
+  `unable to parse TrueNAS volume name`.
+- **`volume_size_info` in list context** now returns `(size, format, used, parent)`,
+  like ZFSPoolPlugin (#294). Before this, the content API, and the `bpg/proxmox`
+  Terraform provider that calls it, died with `no format`. A missing zvol now
+  dies instead of reporting a size of 0.
+- **Orphan zvols couldn't be deleted** (#292). `path()` died on a zvol with no
+  iSCSI extent, so `pvesm free`, the GUI Remove and `qm destroy` couldn't clean up
+  failed allocations or v2-era leftovers. `path()` now returns a placeholder,
+  `iscsi://<portal>/unmapped/<vol>` (multipath:
+  `/dev/mapper/truenas-unmapped-<vol>`), together with the real owner and vtype.
+  `activate_volume` still refuses it, so no VM can open it.
+- **`qm destroy` silently left multipath disks on TrueNAS** (#291). The
+  multipath `path()` returned the LUN id as the owner VMID and the storeid as the
+  vtype, so PVE skipped every disk while the task still reported `OK`.
+  `_naa_to_wwid(undef)` also returned a truthy `"3"`, which pointed at
+  `/dev/mapper/3`. It now returns undef.
+
+### Changed
+- **`truenas-proxmox-multipath` now depends on the exact same `truenas-proxmox`
+  version**, `(= X.Y.Z-1)` instead of `(>= 3.1.0)` (#299). The multipath plugin
+  calls the base plugin's private helpers and `SUPER::volume_resize`, so a
+  mismatched pair failed at runtime. CI fails the build if the dependency drifts.
+
+### Documentation
+- `docs/upgrade-paths.md` now has the real **v3.x → v4.x** in-place procedure
+  (pre-checks, track switch, verification, rollback) and the **v2.x → v4.x**
+  ordering. The README, getting-started and migrating-from-v2 now install from
+  `v4` on PVE 9 (#293).
+- PVE 8 guidance corrected: v3.1+ already requires PVE 9 (ADR-009), so on PVE 8
+  only `3.0.0-1` loads and it must be pinned with `apt-mark hold`.
+- README troubleshooting entries for #291, #292 and #294, with workarounds
+  for ≤ 4.0.1.
+
+### Verified (live, PVE 9.2.21, pve01)
+- Full cycle on every transport and storage type: create with a cloud-init
+  drive, content API `format: raw`, resize +1G while stopped, start, resize
+  +1G while running (QEMU sees the new size), `qm cloudinit update`, then
+  `qm destroy --purge` with no orphan volumes and no iSCSI sessions left.
+  - TrueNAS CORE 13.0-U6.8, REST transport
+  - TrueNAS SCALE 25.04.2.6, WebSocket transport
+  - TrueNAS SCALE 25.10.6, WebSocket transport
+  - `truenas-multipath` on SCALE 25.04.2.6, two portals
+- `prove t/` passes, and perlcritic is clean.
+
 ## [4.0.1] — 2026-09-01
 
 ### Fixed
