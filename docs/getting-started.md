@@ -97,19 +97,19 @@ curl -fsSL https://thegrandwazoo.github.io/freenas-proxmox/public.gpg.key \
 
 ### Step 2 — Add the Package Repository
 
-**PVE 9 / Debian trixie (recommended — deb822 format):**
+**PVE 9 / Debian trixie (recommended: v4 track, deb822 format):**
 
 ```bash
 cat << 'SOURCES' | tee /etc/apt/sources.list.d/truenas-proxmox.sources
 Types: deb
 URIs: https://thegrandwazoo.github.io/freenas-proxmox
-Suites: v3
+Suites: v4
 Components: main
 Signed-By: /etc/apt/keyrings/truenas-proxmox.gpg
 SOURCES
 ```
 
-**PVE 8 / Debian bookworm (one-liner `.list` format):**
+**PVE 8 / Debian bookworm (v3 track, one-line `.list` format):** v4 and v3.1+ require PVE 9. On PVE 8 the only release that loads is 3.0.0, so in Step 3 install it pinned: `apt install truenas-proxmox=3.0.0-1 && apt-mark hold truenas-proxmox`.
 
 ```bash
 echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
@@ -117,7 +117,7 @@ https://thegrandwazoo.github.io/freenas-proxmox v3 main" \
   | tee /etc/apt/sources.list.d/truenas-proxmox.list
 ```
 
-Both formats resolve to the same packages — pick whichever matches your Proxmox VE version. Do not add both; apt would see the repository twice.
+Either source format works on either PVE version. The dist track (`v4` or `v3`) is what has to match your Proxmox VE version. Add only one source; apt would see the repository twice. When a PVE 8 node later moves to PVE 9, see [upgrade-paths.md → v3.x → v4.x](upgrade-paths.md#v3-to-v4).
 
 ### Step 3 — Install the Package
 

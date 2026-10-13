@@ -73,7 +73,9 @@ Before you do anything else, check if any of your VMs have a TPM state disk. QEM
 
 ## Step 1 — Install v3.0 on every Proxmox node
 
-Run this on **every node in the cluster** before adding the new storage:
+Run this on **every node in the cluster** before adding the new storage.
+
+> **Already on PVE 9?** Use `v4` instead of `v3` in the repository line below. Every step after this one is the same for v4. PVE 8 nodes must use `v3` and install `truenas-proxmox=3.0.0-1` (then `apt-mark hold truenas-proxmox`), because v3.1+ requires PVE 9. See [upgrade-paths.md → v2.x → v4.x](upgrade-paths.md#v2-to-v4).
 
 ```bash
 # Import the GPG key

@@ -30,7 +30,7 @@ A Proxmox VE storage plugin that manages ZFS-over-iSCSI volumes on TrueNAS (CORE
 
 ## How It Works
 
-This plugin is a native `PVE::Storage::Custom` type — Proxmox discovers it automatically and treats it like any other storage backend. When you create a VM disk, the plugin calls the **TrueNAS REST API** to provision a ZFS volume (zvol) and a dedicated per-VM iSCSI target, then hands Proxmox an `iscsi://` path. QEMU opens that path directly — no SSH, no `iscsiadm`, no kernel iSCSI sessions on the Proxmox host.
+This plugin is a native `PVE::Storage::Custom` type — Proxmox discovers it automatically and treats it like any other storage backend. When you create a VM disk, the plugin calls the **TrueNAS API** (REST v2.0 for CORE and SCALE < 25.04, WebSocket JSON-RPC 2.0 for SCALE 25.04+, chosen automatically per host) to provision a ZFS volume (zvol) and a dedicated per-VM iSCSI target, then hands Proxmox an `iscsi://` path. QEMU opens that path directly — no SSH, no `iscsiadm`, no kernel iSCSI sessions on the Proxmox host.
 
 - Bearer Token (API key) authentication — no username/password, no SSH keys
 - Per-VM iSCSI targets (`proxmox-vm-<vmid>`) — removing one disk never affects other VMs
@@ -46,7 +46,8 @@ This plugin is a native `PVE::Storage::Custom` type — Proxmox discovers it aut
 
 | Plugin Version | Proxmox VE | TrueNAS CORE | TrueNAS SCALE | Status |
 |:--------------:|:----------:|:------------:|:-------------:|:------:|
-| **3.x** *(stable)* | 8.4.x ✅, 9.x ✅ | 13.0-U6+ ✅ | Electric Eel (24.10) ✅, Fangtooth (25.04) ✅, Goldeneye (25.10) ✅ | Stable |
+| **4.x** *(stable)* | 9.x ✅ | 13.0-U6+ ✅ (REST) | Electric Eel (24.10) (REST), Fangtooth (25.04) ✅ (WebSocket), Goldeneye (25.10) ✅ (WebSocket) | Stable |
+| **3.x** | 8.4.x ✅ (3.0.0 only — v3.1+ needs PVE 9), 9.x ✅ | 13.0-U6+ ✅ | Electric Eel (24.10) ✅, Fangtooth (25.04) ✅, Goldeneye (25.10) ✅ | Maintenance (`release/3.x`) |
 | **2.x** *(stable)* | 7.x ⚠️, 8.0–8.3 ✅, 8.4.x ✅ | 11.3+ | 22.02+ | Active |
 | **1.x** *(legacy)* | 5.x, 6.x | 11.x | — | Unsupported |
 
@@ -64,7 +65,9 @@ Tested combinations are marked ✅. Untested combinations may work but are not v
 >
 > v3.x is tested and working on PVE 8.4.x.
 >
-> Proxmox VE 8 reaches **end-of-life on 2026-08-31**. Plan your upgrade to PVE 9 — v3.x is already tested and fully supported there.
+> Proxmox VE 8 reached **end-of-life on 2026-08-31**. Plan your upgrade to PVE 9 — v3.x is already tested and fully supported there.
+>
+> v4.x requires PVE 9. It installs on PVE 8 but will not load there. v3.1+ also requires PVE 9 (ADR-009). On PVE 8 the only release that loads is **3.0.0**, from the `v3` track, pinned with `apt install truenas-proxmox=3.0.0-1 && apt-mark hold truenas-proxmox`. Unhold it when the node moves to PVE 9.
 
 > **Proxmox VE 9+ users**
 >
@@ -127,7 +130,9 @@ For sites with two or more independent network paths to TrueNAS, the separate **
 
 ## Installation
 
-### Stable Release (v3.x)
+### Stable Release (v4.x)
+
+v4.x requires Proxmox VE 9. On PVE 8, the only release that loads is v3.0.0. Use the `v3` track, i.e. replace `v4` with `v3` below, and install with `apt install truenas-proxmox=3.0.0-1 && apt-mark hold truenas-proxmox` (see [PVE 8 users](#important-version-notices)).
 
 ```bash
 # Import the GPG key
@@ -135,11 +140,11 @@ curl -fsSL https://thegrandwazoo.github.io/freenas-proxmox/public.gpg.key \
   | gpg --dearmor \
   | sudo tee /etc/apt/keyrings/truenas-proxmox.gpg > /dev/null
 
-# Add the v3 repository track (deb822 format — recommended for PVE 9 / Debian trixie)
+# Add the v4 repository track (deb822 format — recommended for PVE 9 / Debian trixie)
 cat << 'SOURCES' | sudo tee /etc/apt/sources.list.d/truenas-proxmox.sources
 Types: deb
 URIs: https://thegrandwazoo.github.io/freenas-proxmox
-Suites: v3
+Suites: v4
 Components: main
 Signed-By: /etc/apt/keyrings/truenas-proxmox.gpg
 SOURCES
@@ -149,19 +154,23 @@ sudo apt update && sudo apt install truenas-proxmox
 ```
 
 <details>
-<summary>PVE 8 / Debian bookworm — one-liner <code>.list</code> format</summary>
+<summary>One-liner <code>.list</code> format</summary>
 
 ```bash
 echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
-https://thegrandwazoo.github.io/freenas-proxmox v3 main" \
+https://thegrandwazoo.github.io/freenas-proxmox v4 main" \
   | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
 ```
 
 </details>
 
-`apt upgrade` will deliver v3.x point releases automatically. You will never be
-automatically promoted to a future v4 — that requires changing the dist track in
-your `sources.list` to `v4`.
+`apt upgrade` delivers v4.x point releases automatically. Packages never move
+between major versions on their own. A v3 install stays on v3 until you change
+the dist track.
+
+### Upgrading from v3.x
+
+The upgrade is in place: switch the dist track from `v3` to `v4` and run `apt upgrade`. `storage.cfg` does not change, disks are not moved, and running VMs are not restarted. Every node must be on PVE 9 first. See [docs/upgrade-paths.md → v3.x → v4.x](docs/upgrade-paths.md#v3-to-v4).
 
 > **Existing users — one-time prompt after v3.2.2**
 > If `apt update` shows `changed its 'Codename' value from 'v3' to 'error'`, run:
@@ -288,7 +297,7 @@ https://thegrandwazoo.github.io/freenas-proxmox main main" \
 
 </details>
 
-For a full upgrade path matrix — including what to do when v4 ships — see [docs/upgrade-paths.md](docs/upgrade-paths.md).
+For a full upgrade path matrix (v2, v3 and v4) see [docs/upgrade-paths.md](docs/upgrade-paths.md).
 
 ---
 
@@ -327,15 +336,15 @@ https://thegrandwazoo.github.io/freenas-proxmox testing main" \
 
 </details>
 
-To switch back to stable, replace `Suites: testing` with `Suites: v3` in `truenas-proxmox.sources` (or `testing` with `v3` in `truenas-proxmox.list` if using the one-liner format) and run `apt update`.
+To switch back to stable, replace `Suites: testing` with `Suites: v4` in `truenas-proxmox.sources` (or `testing` with `v4` in `truenas-proxmox.list` if using the one-liner format) and run `apt update`.
 
 ---
 
 ### Multipath (optional)
 
-Ships as a separate package so single-path installs never pull in `iscsiadm`/`multipath-tools` they don't need. Requires `truenas-proxmox` already installed (see [Stable Release](#stable-release-v3x) above) and at least two TrueNAS iSCSI portals on separate network paths — see [Prerequisites → Multipath](#multipath-optional) for the full requirement.
+Ships as a separate package so single-path installs never pull in `iscsiadm`/`multipath-tools` they don't need. Requires `truenas-proxmox` already installed (see [Stable Release](#stable-release-v4x) above) and at least two TrueNAS iSCSI portals on separate network paths — see [Prerequisites → Multipath](#multipath-optional) for the full requirement.
 
-Add the `multipath` component to your existing `truenas-proxmox.sources` (or `.list`) file — same dist track (`v3`/`testing`/etc.) you're already using for the base package:
+Add the `multipath` component to your existing `truenas-proxmox.sources` (or `.list`) file — same dist track (`v4`/`v3`/`testing`/etc.) you're already using for the base package:
 
 ```bash
 # deb822 format — add "multipath" alongside "main" in Components
@@ -350,7 +359,7 @@ sudo apt update && sudo apt install truenas-proxmox-multipath
 
 ```bash
 echo "deb [signed-by=/etc/apt/keyrings/truenas-proxmox.gpg] \
-https://thegrandwazoo.github.io/freenas-proxmox v3 main multipath" \
+https://thegrandwazoo.github.io/freenas-proxmox v4 main multipath" \
   | sudo tee /etc/apt/sources.list.d/truenas-proxmox.list
 
 sudo apt update && sudo apt install truenas-proxmox-multipath
@@ -421,6 +430,10 @@ v3.0's storage panel has no blocksize field — newly created zvols inherit the 
 ---
 
 ## Upgrading
+
+### v3.x → v4.x (in place)
+
+This is an in-place upgrade on PVE 9: switch the dist track to `v4` and run `apt upgrade`. There are no config changes and no Move Disk, and VMs keep running. Pre-checks, multipath, verification and rollback are covered in [docs/upgrade-paths.md → v3.x → v4.x](docs/upgrade-paths.md#v3-to-v4). Coming from v2.x, do the v2→v3 Move Disk migration below first ([v2.x → v4.x](docs/upgrade-paths.md#v2-to-v4)).
 
 ### v2.x → v2.x (patch / minor upgrade)
 
@@ -568,7 +581,7 @@ TrueNAS SCALE 25.04 **revokes all existing API keys** that were created with whi
 
 **Additionally**, TrueNAS SCALE 25.04 enforces HTTPS for API key authentication — keys transmitted over plain HTTP are automatically revoked. Ensure **Use SSL** is enabled in your Proxmox storage config when using token auth.
 
-> **Note:** TrueNAS SCALE 25.04 also deprecates the REST API this plugin uses (v3.x, all versions to date). It still works through at least SCALE 25.10; full removal is planned for SCALE 26.x. TrueNAS CORE has no plans to remove REST. WebSocket JSON-RPC 2.0 support has been implemented and live-verified for **v4.0.0** (not yet released — in development on the `next` branch; see [ADR-012](.claude/cos/adrs/ADR-012-websocket-transport-v4.md), Accepted, and [issue #243](https://github.com/TheGrandWazoo/truenas-proxmox/issues/243)).
+> **Note:** TrueNAS SCALE 25.04 also deprecates the REST API that v3.x uses. It still works through at least SCALE 25.10, and full removal is planned for SCALE 26.x. TrueNAS CORE has no plans to remove REST. **v4.0+** uses the WebSocket JSON-RPC 2.0 API automatically for SCALE 25.04+ hosts. Upgrade before moving to SCALE 26.x: see [docs/upgrade-paths.md → v3.x → v4.x](docs/upgrade-paths.md#v3-to-v4), [ADR-012](.claude/cos/adrs/ADR-012-websocket-transport-v4.md) and [issue #243](https://github.com/TheGrandWazoo/truenas-proxmox/issues/243).
 
 ### Disk size in Proxmox shows larger than what I entered
 

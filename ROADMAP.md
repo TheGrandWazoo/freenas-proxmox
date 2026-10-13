@@ -53,7 +53,10 @@ Replaced Cloudsmith as the primary package distribution channel. Per-major-versi
 | `main` | v2.x — backward-compat alias | `... freenas-proxmox main main` |
 | `v2` | v2.x — explicit pin | `... freenas-proxmox v2 main` |
 | `v3` | v3.x | `... freenas-proxmox v3 main` |
-| `testing` | beta builds | Future — [#272](https://github.com/TheGrandWazoo/freenas-proxmox/issues/272) |
+| `v4` (`rivendell`) | v4.x — current stable | `... freenas-proxmox v4 main` |
+| `testing` | beta builds from `main` (shipped v3.1.0, [#272](https://github.com/TheGrandWazoo/freenas-proxmox/issues/272)) | `... freenas-proxmox testing main` |
+
+v3→v4 upgrade procedure: [docs/upgrade-paths.md](docs/upgrade-paths.md#v3-to-v4) ([#293](https://github.com/TheGrandWazoo/freenas-proxmox/issues/293), v4.0.2).
 
 ### Components (ADR-011)
 
