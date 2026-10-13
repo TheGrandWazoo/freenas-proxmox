@@ -1,13 +1,13 @@
 Package: freenas-proxmox
-Version: 4.0.1~beta+e40d6d8
+Version: 4.0.2~beta+99a3fa1
 Architecture: all
 Maintainer: KSA Technologies, LLC <theprofessor@ksatechnologies.com>
 Depends: truenas-proxmox (>= 3.0.0)
-Filename: pool/testing/freenas-proxmox_4.0.1~beta+e40d6d8_all.deb
-Size: 1664
-MD5sum: e81212c5969d7b42e030bb0b97b17be5
-SHA1: 915bca8e885c31f87cc3cb6eac6c7c2d558d02d5
-SHA256: 9654b984f5fd4d6ce218ab546b12e9e765dc977a6bb695aecadd9a678119517c
+Filename: pool/testing/freenas-proxmox_4.0.2~beta+99a3fa1_all.deb
+Size: 1662
+MD5sum: 7473218a5ba5512d78f32efb8e42310d
+SHA1: a3369492f48e5f57d9a008130f33bf4955d64068
+SHA256: 6d959cca403f6eaaa045b4ef8372cb4130b67d07563b11eb0b146597518facb6
 Section: perl
 Priority: optional
 Homepage: https://github.com/TheGrandWazoo/truenas-proxmox
@@ -21,17 +21,17 @@ Description: Transitional package — replaced by truenas-proxmox
  The freenas-proxmox package name will not exist in v4.0.
 
 Package: truenas-proxmox
-Version: 4.0.1~beta+e40d6d8
+Version: 4.0.2~beta+99a3fa1
 Architecture: all
 Maintainer: KSA Technologies, LLC <theprofessor@ksatechnologies.com>
 Depends: librest-client-perl, open-iscsi, libprotocol-websocket-perl, libio-socket-ssl-perl
 Breaks: freenas-proxmox (<< 3.0.0)
 Replaces: freenas-proxmox
-Filename: pool/testing/truenas-proxmox_4.0.1~beta+e40d6d8_all.deb
-Size: 22882
-MD5sum: de06f3656a7d6702653037857f4fa9be
-SHA1: c267cfd56685194b701e9840e7ac4f22f5c1a8a8
-SHA256: b845344aafb0e26741d8ec7ce5c832a0f78212fe68b89ffa1195d85c3ae452d2
+Filename: pool/testing/truenas-proxmox_4.0.2~beta+99a3fa1_all.deb
+Size: 23304
+MD5sum: 26532668a807690deec187e18b0b48bc
+SHA1: 1759ba93a31d896b7eeced26c00b2c80e28e3877
+SHA256: c633bd619a6671763ac237ee51d1fdb01e6f665673c849531b52ba55371d4ad2
 Section: perl
 Priority: optional
 Homepage: https://github.com/TheGrandWazoo/truenas-proxmox
