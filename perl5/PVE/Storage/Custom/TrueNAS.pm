@@ -356,13 +356,21 @@ sub _ws_pump {
     my ($scfg, $sock, $client, $deadline, $what) = @_;
     my $host = $scfg->{truenas_host};
 
+    # After a timeout the stream state is unknown (a late reply may still
+    # arrive), so the connection is dropped rather than kept for reuse.
     my $remaining = $deadline - time();
-    die "TrueNAS WebSocket $what to $host timed out\n" if $remaining <= 0;
+    if ($remaining <= 0) {
+        _ws_drop($host);
+        die "TrueNAS WebSocket $what to $host timed out\n";
+    }
 
     my $rin = '';
     vec($rin, fileno($sock), 1) = 1;
     my $nfound = select(my $rout = $rin, undef, undef, $remaining);
-    die "TrueNAS WebSocket $what to $host timed out\n" unless $nfound;
+    unless ($nfound) {
+        _ws_drop($host);
+        die "TrueNAS WebSocket $what to $host timed out\n";
+    }
 
     my $buf;
     my $n = $sock->sysread($buf, 65536);
@@ -402,7 +410,13 @@ sub _ws_connect {
     my $client = Protocol::WebSocket::Client->new(url => "wss://$host/api/current");
     $client->on(write => sub {
         my (undef, $buf) = @_;
-        print { $sock } $buf;
+        # A peer reset must surface as a closed connection (which read-only
+        # calls retry), not as SIGPIPE or a 30 s wait for a reply.
+        local $SIG{PIPE} = 'IGNORE';
+        unless (print { $sock } $buf) {
+            _ws_drop($host);
+            die "TrueNAS WebSocket connection to $host closed unexpectedly during write\n";
+        }
     });
     $client->on(connect => sub {
         $handshake_done = 1;
@@ -422,17 +436,23 @@ sub _ws_connect {
     _ws_pump($scfg, $sock, $client, $deadline, 'handshake') until $handshake_done;
 
     $state->{$host}{ws} = {
-        sock    => $sock,
-        client  => $client,
+        sock      => $sock,
+        client    => $client,
         inbound   => \@inbound,
         next_id   => 1,
         last_used => time(),
     };
 
-    my $auth = _ws_call($scfg, 'auth.login_with_api_key', [$token]);
+    # Never leave an unauthenticated connection cached: it would pass the
+    # reuse check and every later call on it would fail.
+    my $auth = eval { _ws_call($scfg, 'auth.login_with_api_key', [$token]) };
+    if (my $err = $@) {
+        _ws_drop($host);
+        die $err;
+    }
     unless (!$auth->{error} && $auth->{result}) {
         my $reason = $auth->{error}{message} // 'authentication rejected';
-        delete $state->{$host}{ws};
+        _ws_drop($host);
         die "TrueNAS WebSocket auth failed for $host: $reason\n";
     }
 

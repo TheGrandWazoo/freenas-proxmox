@@ -81,14 +81,13 @@ subtest '_ws_reusable pings only idle connections' => sub {
     is($pings, 0, '... and not pinged');
 };
 
-# Stubs the transport under _api_ws: _ws_connect counts reconnects, _ws_call
-# fails the first $fail_times calls with $err and then succeeds.
+# Stub transport under _api_ws: _ws_connect counts reconnects, _ws_call fails
+# the first $fail_times calls with $err and then succeeds.
 sub stub_transport {
     my (%o) = @_;
     my $s = { connects => 0, calls => [] };
-    no warnings 'redefine';    ## no critic (TestingAndDebugging::ProhibitNoWarnings)
-    *PVE::Storage::Custom::TrueNAS::_ws_connect = sub { $s->{connects}++; return {}; };
-    *PVE::Storage::Custom::TrueNAS::_ws_call = sub {
+    $s->{connect} = sub { $s->{connects}++; return {}; };
+    $s->{call}    = sub {
         my (undef, $method) = @_;
         push @{ $s->{calls} }, $method;
         die $o{err} if @{ $s->{calls} } <= ($o{fail_times} // 0);
@@ -97,12 +96,22 @@ sub stub_transport {
     return $s;
 }
 
+# Calls _api_ws with $s's stubs installed via `local`, so they can't leak
+# into other subtests.
+sub api_ws {
+    my ($s, @args) = @_;
+    no warnings 'redefine';    ## no critic (TestingAndDebugging::ProhibitNoWarnings)
+    local *PVE::Storage::Custom::TrueNAS::_ws_connect = $s->{connect};
+    local *PVE::Storage::Custom::TrueNAS::_ws_call    = $s->{call};
+    return $TN->can('_api_ws')->(MockTrueNAS::scfg(), @args);
+}
+
 my $closed = "TrueNAS WebSocket connection to truenas.test closed unexpectedly during call 'x'\n";
 
 subtest 'read-only call is retried once after the socket closes' => sub {
     MockTrueNAS->install();
     my $s = stub_transport(err => $closed, fail_times => 1, result => { basename => 'iqn.test' });
-    my $r = $TN->can('_api_ws')->(MockTrueNAS::scfg(), 'GET', '/iscsi/global');
+    my $r = api_ws($s, 'GET', '/iscsi/global');
     is($r->{basename}, 'iqn.test', 'second attempt result returned');
     is_deeply($s->{calls}, ['iscsi.global.config', 'iscsi.global.config'], 'called twice');
     is($s->{connects}, 2, 'reconnected before the retry');
@@ -111,7 +120,7 @@ subtest 'read-only call is retried once after the socket closes' => sub {
 subtest 'query is retried, but only once' => sub {
     MockTrueNAS->install();
     my $s = stub_transport(err => $closed, fail_times => 2);
-    eval { $TN->can('_api_ws')->(MockTrueNAS::scfg(), 'GET', '/iscsi/extent') };
+    eval { api_ws($s, 'GET', '/iscsi/extent') };
     like($@, qr/closed unexpectedly/, 'second failure propagates');
     is(scalar @{ $s->{calls} }, 2, 'no third attempt');
 };
@@ -119,7 +128,7 @@ subtest 'query is retried, but only once' => sub {
 subtest 'writes are never retried' => sub {
     MockTrueNAS->install();
     my $s = stub_transport(err => $closed, fail_times => 1);
-    eval { $TN->can('_api_ws')->(MockTrueNAS::scfg(), 'DELETE', '/iscsi/target/id/7') };
+    eval { api_ws($s, 'DELETE', '/iscsi/target/id/7') };
     like($@, qr/closed unexpectedly/, 'error propagates');
     is_deeply($s->{calls}, ['iscsi.target.delete'], 'called exactly once');
 };
@@ -128,7 +137,7 @@ subtest 'other errors on reads are not retried' => sub {
     MockTrueNAS->install();
     my $s = stub_transport(err => "TrueNAS WebSocket call 'x' to truenas.test timed out after 30s\n",
                            fail_times => 1);
-    eval { $TN->can('_api_ws')->(MockTrueNAS::scfg(), 'GET', '/iscsi/global') };
+    eval { api_ws($s, 'GET', '/iscsi/global') };
     like($@, qr/timed out/, 'timeout propagates');
     is(scalar @{ $s->{calls} }, 1, 'called exactly once');
 };
