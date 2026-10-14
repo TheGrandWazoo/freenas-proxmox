@@ -648,6 +648,27 @@ ls /etc/pve/nodes/*/qemu-server/<id>.conf 2>/dev/null  # no output → VM no lon
 
 To free an orphan, use `pvesm free <storage>:<vol>`. On 4.0.1 and earlier, use the `vdisk_free` one-liner from the entry above. Freeing a VM's last disk also removes its now-empty per-VM target.
 
+### "WebSocket connection ... closed unexpectedly", or a SCALE storage flapping to inactive (4.0.0–4.0.2)
+
+**Symptom:** on TrueNAS SCALE 25.04+, requests through the Proxmox API, GUI or Terraform fail at random. Retrying sometimes helps. The error looks like this:
+
+```
+TrueNAS WebSocket connection to <host> closed unexpectedly during call 'pool.dataset.query'
+```
+
+Other symptoms:
+- VM creation fails, sometimes leaving the VM in `lock: create`.
+- Content listings return HTTP 500.
+- The storage shows `active: 0` for some requests and `active: 1` for others.
+- `qm`/`pvesm` on the command line work fine.
+
+**Cause:** TrueNAS closes an idle WebSocket after 30–60 s. Each long-lived `pvedaemon` worker kept its cached connection and reused it after TrueNAS had closed it. **Fixed in v4.0.3** ([#303](https://github.com/TheGrandWazoo/freenas-proxmox/issues/303)). Now a cached connection is checked before every reuse and pinged if it has been idle, and read-only calls reconnect and retry once. TrueNAS CORE and SCALE < 25.04 (REST) were never affected.
+
+**On 4.0.0–4.0.2:**
+- Upgrade.
+- If you can't upgrade yet, `systemctl restart pvedaemon` clears the stale connections, but only until they go idle again.
+- A VM left in `lock: create` with no disks can be removed with `qm unlock <vmid> && qm destroy <vmid>`.
+
 ### Filing a Bug Report
 
 Please use the [GitHub issue tracker](https://github.com/TheGrandWazoo/truenas-proxmox/issues) and include the [bug report template](.github/ISSUE_TEMPLATE/bug_report.md). Include relevant log lines from `syslog` (search for `FreeNAS::`).
