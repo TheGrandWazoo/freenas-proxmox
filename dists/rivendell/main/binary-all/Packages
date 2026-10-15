@@ -64,6 +64,28 @@ Description: Transitional package — replaced by truenas-proxmox
  .
  The freenas-proxmox package name will not exist in v4.0.
 
+Package: freenas-proxmox
+Version: 4.0.3-1
+Architecture: all
+Maintainer: KSA Technologies, LLC <theprofessor@ksatechnologies.com>
+Depends: truenas-proxmox (>= 3.0.0)
+Filename: pool/v4/freenas-proxmox_4.0.3-1_all.deb
+Size: 1656
+MD5sum: d8c021de4739f382902e5ca8fc3dc0ca
+SHA1: 7ea66c329618cdc4504d5555a32a0543e50c506f
+SHA256: 4d8334b15b02ed451b77f953b1080dbb59e4873d186369998b5c993375c27cc7
+Section: perl
+Priority: optional
+Homepage: https://github.com/TheGrandWazoo/truenas-proxmox
+Description: Transitional package — replaced by truenas-proxmox
+ This is an empty transitional package. The plugin has been renamed from
+ freenas-proxmox to truenas-proxmox. Installing this package pulls in the
+ real package automatically.
+ .
+ To fully complete migration: apt install truenas-proxmox && apt purge freenas-proxmox
+ .
+ The freenas-proxmox package name will not exist in v4.0.
+
 Package: truenas-proxmox
 Version: 4.0.0-1
 Architecture: all
@@ -124,6 +146,30 @@ Size: 23294
 MD5sum: 5b4a3ac91223c7fdb046dddca72b9328
 SHA1: baf0ac1e444d83db0413963e91a9bead026dbe17
 SHA256: 1640379c4200127a7039706de11627675b109252539984854f1bfd22ac5e67ba
+Section: perl
+Priority: optional
+Homepage: https://github.com/TheGrandWazoo/truenas-proxmox
+Description: TrueNAS Custom Storage Plugin for Proxmox VE
+ Native PVE::Storage::Custom plugin for managing TrueNAS ZFS volumes over iSCSI.
+ Discovered automatically by Proxmox VE — no patches to PVE system files required.
+ Supports TrueNAS CORE and SCALE via the TrueNAS REST API with Bearer Token auth.
+ No SSH keys required.
+ .
+ Licensed under the GNU Affero General Public License v3 (AGPL-3.0).
+ Copyright (c) 2020 KSA Technologies, LLC.
+
+Package: truenas-proxmox
+Version: 4.0.3-1
+Architecture: all
+Maintainer: KSA Technologies, LLC <theprofessor@ksatechnologies.com>
+Depends: librest-client-perl, open-iscsi, libprotocol-websocket-perl, libio-socket-ssl-perl
+Breaks: freenas-proxmox (<< 3.0.0)
+Replaces: freenas-proxmox
+Filename: pool/v4/truenas-proxmox_4.0.3-1_all.deb
+Size: 24562
+MD5sum: 273dd4be5025b6807c0c133e6046d9cb
+SHA1: d1365d5014755315a96f1aecee001d606553a0f7
+SHA256: 5225d6fdd15d387683fca41bc82e0533e8d733af377baf097d3c82863effe5e1
 Section: perl
 Priority: optional
 Homepage: https://github.com/TheGrandWazoo/truenas-proxmox
