@@ -237,6 +237,29 @@ Closes the volume-lifecycle gaps found while running real workloads (Terraform c
 
 ---
 
+## Released — v4.0.3 (WebSocket reliability)
+
+**Released:** 2026-10-14  
+**Branch:** `main`  
+**GitHub Release:** https://github.com/TheGrandWazoo/freenas-proxmox/releases/tag/v4.0.3
+
+TrueNAS closes idle WebSockets after 30–60 s, and long-lived PVE daemons reused the dead cached connection. VM creates failed, content listings returned HTTP 500, and SCALE storages flapped to inactive. The CLI never showed it. Found by the slm-saas-poc Terraform session. v3.x is unaffected because it is REST only.
+
+### Confirmed tested
+
+| Component | Versions |
+|-----------|---------|
+| Proxmox VE | 9.2.21 |
+| TrueNAS SCALE | 25.04.2.6, 25.10.6 (WebSocket transport) |
+
+### What shipped
+
+| # | Title | Commit |
+|---|-------|--------|
+| [#303](https://github.com/TheGrandWazoo/freenas-proxmox/issues/303) | Check and ping a cached WebSocket before reuse; retry read-only calls once; drop the connection on timeout, write failure or failed login | d4ef4a4 |
+
+---
+
 ## Process Rules
 
 - Every business decision (defer, hold, change scope) is recorded here **and** as a comment on the relevant GitHub issue — not only in conversation or AI memory.

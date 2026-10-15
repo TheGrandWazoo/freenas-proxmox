@@ -8,7 +8,9 @@ See each [GitHub Release](https://github.com/TheGrandWazoo/truenas-proxmox/relea
 
 ---
 
-## [Unreleased] — 4.0.3
+## [4.0.3] — 2026-10-14
+
+WebSocket reliability. No config changes. Milestone: *v4.0.3 — WebSocket reliability*.
 
 ### Fixed
 - **WebSocket calls failed after the connection sat idle in a PVE daemon**
@@ -25,12 +27,18 @@ See each [GitHub Release](https://github.com/TheGrandWazoo/truenas-proxmox/relea
     2–4 ms, compared with 1–4 s for a reconnect and login.
   - Read-only calls (`*.query`, `*.config`) that still hit a closed socket
     reconnect and retry once. Writes are never retried.
+  - The cached connection is also discarded after a call times out, after
+    a failed write (SIGPIPE is ignored, so a reset peer shows up as a
+    retryable "closed" error), and after a failed login, so a stale or
+    unauthenticated socket is never reused.
 
 ### Verified
 - Read-only idle probe on pve01: 4.0.2 fails after 60 s and 90 s of idle
   time on SCALE 25.04 and 25.10. A long-lived process with the fix ran
   `status` plus `list_images` every 45 s for 5 minutes against both hosts,
   14/14 OK.
+- Retest of the final code (f8c2d4b) with 75 s idle gaps, so TrueNAS closed
+  the connection before every round: 14/14 OK on SCALE 25.04.2.6 and 25.10.6.
 
 ## [4.0.2] — 2026-10-13
 
