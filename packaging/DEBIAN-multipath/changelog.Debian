@@ -1,3 +1,10 @@
+truenas-proxmox-multipath (4.0.3-1) trixie; urgency=medium
+
+  * Version bump to match truenas-proxmox 4.0.3; WebSocket idle-reconnect
+    fix inherited from TrueNAS.pm (#303)
+
+ -- KSA Technologies, LLC <theprofessor@ksatechnologies.com>  Wed, 14 Oct 2026 00:00:00 +0000
+
 truenas-proxmox-multipath (4.0.2-1) trixie; urgency=medium
 
   * volume_resize: rescan kernel iSCSI sessions and multipathd resize map
