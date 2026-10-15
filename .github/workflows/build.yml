@@ -28,7 +28,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.3.1
+      - uses: actions/checkout@v7.0.1
 
       - name: Install lint tools
         run: |
@@ -100,7 +100,7 @@ jobs:
       is_release:           ${{ steps.vars.outputs.is_release }}
 
     steps:
-      - uses: actions/checkout@v4.3.1
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
@@ -281,7 +281,7 @@ jobs:
             || { echo "::error::multipath must depend on truenas-proxmox (= ${VERSION})"; exit 1; }
 
       - name: Upload package artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: packages-${{ steps.vars.outputs.version }}
           path: |
@@ -297,10 +297,10 @@ jobs:
     needs: build
 
     steps:
-      - uses: actions/checkout@v4.3.1
+      - uses: actions/checkout@v7.0.1
 
       - name: Run Trivy (repo scan — secrets + misconfig)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -310,7 +310,7 @@ jobs:
           format: table
 
       - name: Download built packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: packages-${{ needs.build.outputs.version }}
 
@@ -320,7 +320,7 @@ jobs:
           dpkg-deb --extract "${{ needs.build.outputs.deb_file }}" deb-contents/
 
       - name: Run Trivy (package contents — vuln + secret)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: deb-contents
@@ -340,10 +340,10 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4.3.1
+      - uses: actions/checkout@v7.0.1
 
       - name: Download built packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: packages-${{ needs.build.outputs.version }}
 
