@@ -303,6 +303,49 @@ sub _api_rest {
 # - decode_json turns JSON true/false into a blessed JSON::PP::Boolean
 #   object, not a plain 1/0 — ref() on it is truthy. Never assume a non-hash
 #   JSON-RPC result is a plain scalar without checking ref() eq 'HASH' first.
+# - TrueNAS closes an idle WebSocket after 30-60s, and a pvedaemon worker keeps
+#   $state across API requests, so a cached connection can be dead by the time
+#   it is reused (#303). _ws_connect checks a cached connection before every
+#   reuse: nothing may be pending on the socket, and one idle for more than
+#   $ws_ping_after seconds must answer core.ping. A ping is 2-4 ms, while a
+#   reconnect and login takes 1-4 s, and the ping also resets TrueNAS's idle
+#   timer. It also catches half-open connections, where nothing ever becomes
+#   readable.
+my $ws_ping_after   = 10;
+my $ws_ping_timeout = 5;
+
+# Closes and forgets the cached connection for $host, if any.
+sub _ws_drop {
+    my ($host) = @_;
+    my $ws = delete $state->{$host}{ws} or return;
+    eval { $ws->{sock}->close(SSL_no_shutdown => 1) };
+    return;
+}
+
+# True if nothing is readable on a cached connection's socket. This is a
+# strict request/response protocol, so anything readable while idle can only
+# be EOF or a close frame.
+sub _ws_quiet {
+    my ($ws) = @_;
+    my $sock = $ws->{sock};
+    return 0 unless $sock && defined fileno($sock);
+    return 0 if $sock->pending;
+
+    my $rin = '';
+    vec($rin, fileno($sock), 1) = 1;
+    my $nfound = select(my $rout = $rin, undef, undef, 0);
+    return $nfound ? 0 : 1;
+}
+
+# True if the cached connection for $scfg's host can be reused (see above).
+sub _ws_reusable {
+    my ($scfg, $ws) = @_;
+    return 0 unless _ws_quiet($ws);
+    return 1 if time() - ($ws->{last_used} // 0) <= $ws_ping_after;
+
+    my $pong = eval { _ws_call($scfg, 'core.ping', [], $ws_ping_timeout) };
+    return ($pong && !$pong->{error}) ? 1 : 0;
+}
 
 # Blocks until $sock is readable (or dies on timeout), then reads whatever's
 # available and feeds it to the Protocol::WebSocket::Client state machine —
@@ -313,18 +356,26 @@ sub _ws_pump {
     my ($scfg, $sock, $client, $deadline, $what) = @_;
     my $host = $scfg->{truenas_host};
 
+    # After a timeout the stream state is unknown (a late reply may still
+    # arrive), so the connection is dropped rather than kept for reuse.
     my $remaining = $deadline - time();
-    die "TrueNAS WebSocket $what to $host timed out after 30s\n" if $remaining <= 0;
+    if ($remaining <= 0) {
+        _ws_drop($host);
+        die "TrueNAS WebSocket $what to $host timed out\n";
+    }
 
     my $rin = '';
     vec($rin, fileno($sock), 1) = 1;
     my $nfound = select(my $rout = $rin, undef, undef, $remaining);
-    die "TrueNAS WebSocket $what to $host timed out after 30s\n" unless $nfound;
+    unless ($nfound) {
+        _ws_drop($host);
+        die "TrueNAS WebSocket $what to $host timed out\n";
+    }
 
     my $buf;
     my $n = $sock->sysread($buf, 65536);
     unless (defined $n && $n > 0) {
-        delete $state->{$host}{ws};
+        _ws_drop($host);
         die "TrueNAS WebSocket connection to $host closed unexpectedly during $what\n";
     }
     $client->read($buf);
@@ -335,7 +386,10 @@ sub _ws_pump {
 sub _ws_connect {
     my ($scfg) = @_;
     my $host = $scfg->{truenas_host};
-    return $state->{$host}{ws} if $state->{$host}{ws};
+    if (my $cached = $state->{$host}{ws}) {
+        return $cached if _ws_reusable($scfg, $cached);
+        _ws_drop($host);
+    }
 
     my $token = $state->{$host}{api_token}
         or die "TrueNAS API token not resolved for '$host'\n";
@@ -356,7 +410,13 @@ sub _ws_connect {
     my $client = Protocol::WebSocket::Client->new(url => "wss://$host/api/current");
     $client->on(write => sub {
         my (undef, $buf) = @_;
-        print { $sock } $buf;
+        # A peer reset must surface as a closed connection (which read-only
+        # calls retry), not as SIGPIPE or a 30 s wait for a reply.
+        local $SIG{PIPE} = 'IGNORE';
+        unless (print { $sock } $buf) {
+            _ws_drop($host);
+            die "TrueNAS WebSocket connection to $host closed unexpectedly during write\n";
+        }
     });
     $client->on(connect => sub {
         $handshake_done = 1;
@@ -376,16 +436,23 @@ sub _ws_connect {
     _ws_pump($scfg, $sock, $client, $deadline, 'handshake') until $handshake_done;
 
     $state->{$host}{ws} = {
-        sock    => $sock,
-        client  => $client,
-        inbound => \@inbound,
-        next_id => 1,
+        sock      => $sock,
+        client    => $client,
+        inbound   => \@inbound,
+        next_id   => 1,
+        last_used => time(),
     };
 
-    my $auth = _ws_call($scfg, 'auth.login_with_api_key', [$token]);
+    # Never leave an unauthenticated connection cached: it would pass the
+    # reuse check and every later call on it would fail.
+    my $auth = eval { _ws_call($scfg, 'auth.login_with_api_key', [$token]) };
+    if (my $err = $@) {
+        _ws_drop($host);
+        die $err;
+    }
     unless (!$auth->{error} && $auth->{result}) {
         my $reason = $auth->{error}{message} // 'authentication rejected';
-        delete $state->{$host}{ws};
+        _ws_drop($host);
         die "TrueNAS WebSocket auth failed for $host: $reason\n";
     }
 
@@ -396,7 +463,7 @@ sub _ws_connect {
 # Returns the decoded {result=>...} or {error=>...} response envelope —
 # callers (normally just _api_ws) are responsible for checking ->{error}.
 sub _ws_call {
-    my ($scfg, $method, $params) = @_;
+    my ($scfg, $method, $params, $timeout) = @_;
     my $host = $scfg->{truenas_host};
     my $ws   = $state->{$host}{ws}
         or die "TrueNAS WebSocket connection not established for '$host'\n";
@@ -405,7 +472,7 @@ sub _ws_call {
     my $req = { jsonrpc => '2.0', id => $id, method => $method, params => $params // [] };
     $ws->{client}->write(encode_json($req));    # frames + masks + fires 'write'
 
-    my $deadline = time() + 30;
+    my $deadline = time() + ($timeout // 30);
     my $result;
     until (defined $result) {
         while (my $msg = shift @{ $ws->{inbound} }) {
@@ -421,6 +488,7 @@ sub _ws_call {
         _ws_pump($scfg, $ws->{sock}, $ws->{client}, $deadline, "call '$method'")
             unless defined $result;
     }
+    $ws->{last_used} = time();
     return $result;
 }
 
@@ -568,7 +636,16 @@ sub _api_ws {
     die "TrueNAS WebSocket transport: no JSON-RPC mapping for $method $path\n"
         unless $rpc_method;
 
-    my $resp = _ws_call($scfg, $rpc_method, $params);
+    # A connection can still die between _ws_connect's check and the call
+    # (#303). Read-only calls are safe to repeat, so reconnect and retry those
+    # once. Writes are never retried: TrueNAS may already have applied them.
+    my $resp = eval { _ws_call($scfg, $rpc_method, $params) };
+    if (my $err = $@) {
+        die $err unless $err =~ /closed unexpectedly/ && $rpc_method =~ /\.(?:query|config)$/;
+        _log('warning', "$scfg->{truenas_host}: WebSocket closed during '$rpc_method' — reconnecting and retrying once");
+        _ws_connect($scfg);
+        $resp = _ws_call($scfg, $rpc_method, $params);
+    }
 
     if ($resp->{error}) {
         my $reason = (ref($resp->{error}{data}) eq 'HASH' && $resp->{error}{data}{reason})

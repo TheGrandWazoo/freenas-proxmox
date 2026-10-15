@@ -8,6 +8,30 @@ See each [GitHub Release](https://github.com/TheGrandWazoo/truenas-proxmox/relea
 
 ---
 
+## [Unreleased] — 4.0.3
+
+### Fixed
+- **WebSocket calls failed after the connection sat idle in a PVE daemon**
+  (#303). TrueNAS closes an idle WebSocket after 30–60 s (measured on SCALE
+  25.04 and 25.10). Long-lived `pvedaemon` workers reused their cached
+  connection after that and died with `closed unexpectedly during call
+  'pool.dataset.query'`. That failed VM creates (once leaving a VM in
+  `lock: create`), returned HTTP 500 on content listings, and made `status()`
+  report SCALE storages as inactive at random. The CLI was unaffected
+  because each `qm`/`pvesm` is a fresh process.
+  - Before every reuse, a cached connection must have nothing pending on
+    the socket, and if it has been idle for more than 10 s it must answer
+    `core.ping` within 5 s. Otherwise the plugin reconnects. A ping takes
+    2–4 ms, compared with 1–4 s for a reconnect and login.
+  - Read-only calls (`*.query`, `*.config`) that still hit a closed socket
+    reconnect and retry once. Writes are never retried.
+
+### Verified
+- Read-only idle probe on pve01: 4.0.2 fails after 60 s and 90 s of idle
+  time on SCALE 25.04 and 25.10. A long-lived process with the fix ran
+  `status` plus `list_images` every 45 s for 5 minutes against both hosts,
+  14/14 OK.
+
 ## [4.0.2] — 2026-10-13
 
 Volume lifecycle fixes. Every change is backward compatible and `storage.cfg` is unchanged.
