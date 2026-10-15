@@ -1,13 +1,13 @@
 Package: truenas-proxmox-multipath
-Version: 4.0.2~beta+d4ef4a4
+Version: 4.0.3~beta+1a6ab13
 Architecture: all
 Maintainer: KSA Technologies, LLC <theprofessor@ksatechnologies.com>
-Depends: truenas-proxmox (= 4.0.2~beta+d4ef4a4), open-iscsi, multipath-tools
-Filename: pool/multipath/testing/truenas-proxmox-multipath_4.0.2~beta+d4ef4a4_all.deb
-Size: 8842
-MD5sum: 889c364b6823ab818c49b269893479f2
-SHA1: 0e4c5271ab3f7f32d265eec7735da49334d1f398
-SHA256: aa8131a70a61f050f8794117515cf1d0cd73b2ae57d074d76498c353a444d808
+Depends: truenas-proxmox (= 4.0.3~beta+1a6ab13), open-iscsi, multipath-tools
+Filename: pool/multipath/testing/truenas-proxmox-multipath_4.0.3~beta+1a6ab13_all.deb
+Size: 8900
+MD5sum: a748858de1b7e96c2ab25540bdc99976
+SHA1: cfc2d4c301f36ad82f297f0b0726f67b6dfd3c9c
+SHA256: a32dc54cbd630873c4b782f7781bdf2756e2f6f3874e474d99f554ff37fc0f68
 Section: perl
 Priority: optional
 Homepage: https://github.com/TheGrandWazoo/truenas-proxmox
