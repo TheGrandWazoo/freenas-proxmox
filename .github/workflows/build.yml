@@ -26,7 +26,7 @@ concurrency:
 jobs:
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -87,7 +87,7 @@ jobs:
   # ── Job 2: Build .deb ────────────────────────────────────────────────────────
   build:
     name: Build Package
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [lint]
 
     outputs:
@@ -293,7 +293,7 @@ jobs:
   # ── Job 3: Security scan ─────────────────────────────────────────────────────
   security:
     name: Security Scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: build
 
     steps:
@@ -332,7 +332,7 @@ jobs:
   # ── Job 4: Publish ───────────────────────────────────────────────────────────
   publish:
     name: Publish
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [build, security]
     # Only publish on direct pushes (not PRs) to tracked branches or tags
     if: github.event_name == 'push' && needs.build.outputs.channel != 'none'
