@@ -117,6 +117,15 @@ sub properties {
                          . "Leave blank to auto-discover from the portal IP.",
             type        => 'string',
         },
+        truenas_status_cache => {
+            description => "Seconds to cache the storage usage reported by status() "
+                         . "on each node (0 disables the cache). pvestatd calls status() "
+                         . "every ~10s on every node; each call costs a pool.dataset query "
+                         . "on the TrueNAS middleware.",
+            type        => 'integer',
+            minimum     => 0,
+            default     => 60,
+        },
     };
 }
 
@@ -135,6 +144,7 @@ sub options {
         truenas_dataset    => { optional => 1 },
         truenas_portal_ip  => { optional => 1 },
         truenas_target     => { optional => 1 },
+        truenas_status_cache => { optional => 1 },
     };
 }
 
@@ -890,14 +900,36 @@ sub status {
     my ($class, $storeid, $scfg, $cache) = @_;
     _resolve_token($storeid, $scfg);
 
-    my $pool_name = (split m{/}, $scfg->{truenas_pool})[0];
-    my $datasets  = _api($scfg, 'GET', "/pool/dataset?id=$pool_name") // [];
-    my ($ds)      = grep { $_->{name} eq $pool_name } @$datasets;
-    die "Pool dataset '$pool_name' not found on $scfg->{truenas_host}\n" unless $ds;
+    # pvestatd calls status() every ~10s on every node: serve it from a small
+    # per-node cache so N nodes do not hammer the TrueNAS middleware.
+    my $ttl    = $scfg->{truenas_status_cache} // 60;
+    my $cachef = "/run/truenas-status-cache-$storeid";
+    if ($ttl > 0 && (my @st = stat($cachef))) {
+        if (time() - $st[9] < $ttl && open(my $fh, '<', $cachef)) {
+            my ($t, $f, $u) = split(/\s+/, scalar(<$fh>) // '');
+            close($fh);
+            return ($t, $f, $u, 1) if defined $u;
+        }
+    }
+
+    # Query only the configured dataset, without its children: the previous
+    # "/pool/dataset?id=<pool>" returned the whole tree (several MB on pools
+    # with hundreds of datasets) on every call.
+    my $pool_name = $scfg->{truenas_pool};
+    (my $enc = $pool_name) =~ s{/}{%2F}g;
+    my $ds = _api($scfg, 'GET', "/pool/dataset/id/$enc?extra.retrieve_children=false");
+    die "Pool dataset '$pool_name' not found on $scfg->{truenas_host}\n"
+        unless $ds && ref($ds) eq 'HASH' && $ds->{name};
 
     my $free  = $ds->{available}{parsed} // 0;
     my $used  = $ds->{used}{parsed}      // 0;
     my $total = $free + $used;
+
+    if ($ttl > 0 && open(my $fh, '>', "$cachef.tmp")) {
+        print $fh "$total $free $used\n";
+        close($fh);
+        rename("$cachef.tmp", $cachef);
+    }
 
     return ($total, $free, $used, 1);
 }
