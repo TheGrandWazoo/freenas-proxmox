@@ -60,7 +60,7 @@ sub _route {
             my ($t) = grep { $_->{id} == $1 } @{ $db->{targets} // [] };
             return $t;
         }
-        if ($path =~ m{^/pool/dataset/id/(.+)$}) {
+        if ($path =~ m{^/pool/dataset/id/([^?]+)}) {
             my $name = URI::Escape::uri_unescape($1);
             return $db->{datasets}{$name};
         }

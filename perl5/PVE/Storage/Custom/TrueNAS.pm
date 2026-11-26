@@ -492,6 +492,20 @@ sub _ws_call {
     return $result;
 }
 
+# Maps REST "extra.<key>=<value>" query parameters onto JSON-RPC query
+# options {extra => {<key> => <value>}}, with "true"/"false" as booleans.
+# Without this the WS transport silently drops them (#310).
+sub _ws_query_opts {
+    my ($q) = @_;
+    my %extra;
+    for my $k (grep { /^extra\./ } keys %$q) {
+        my $v = $q->{$k};
+        $v = $v eq 'true' ? JSON::true : $v eq 'false' ? JSON::false : $v;
+        $extra{ substr($k, 6) } = $v;
+    }
+    return %extra ? { extra => \%extra } : {};
+}
+
 # Translates a REST-style (method, path, data) call onto its JSON-RPC 2.0
 # equivalent and executes it over _ws_connect's transport. Read (query)
 # mappings are confirmed live (ADR-012); write mappings are inferred from
@@ -594,7 +608,7 @@ sub _api_ws {
             my @filter;
             push @filter, [ 'id',   '=', $q{id} ]   if defined $q{id};
             push @filter, [ 'type', '=', $q{type} ] if defined $q{type};
-            $params = [\@filter, {}];
+            $params = [\@filter, _ws_query_opts(\%q)];
         }
 
     } elsif ($base =~ m{^/pool/dataset/id/(.+)$}) {
@@ -607,7 +621,7 @@ sub _api_ws {
             $params     = [$id, $data];
         } else {
             $rpc_method = 'pool.dataset.query';
-            $params     = [[[ 'id', '=', $id ]], {}];
+            $params     = [[[ 'id', '=', $id ]], _ws_query_opts(\%q)];
             $single     = 1;
         }
 
@@ -890,10 +904,16 @@ sub status {
     my ($class, $storeid, $scfg, $cache) = @_;
     _resolve_token($storeid, $scfg);
 
+    # pvestatd calls this every ~10 s on every node. Without
+    # retrieve_children=false TrueNAS builds the whole dataset tree under the
+    # pool on each call, which pins middlewared on large pools (#310). Must be
+    # the /id/ form: CORE 13 ignores the option there but returns [] when it
+    # is combined with an ?id= filter (verified live 2026-11-26).
     my $pool_name = (split m{/}, $scfg->{truenas_pool})[0];
-    my $datasets  = _api($scfg, 'GET', "/pool/dataset?id=$pool_name") // [];
-    my ($ds)      = grep { $_->{name} eq $pool_name } @$datasets;
-    die "Pool dataset '$pool_name' not found on $scfg->{truenas_host}\n" unless $ds;
+    my $enc       = uri_escape($pool_name, "^A-Za-z0-9\\-_.~");
+    my $ds        = _api($scfg, 'GET', "/pool/dataset/id/$enc?extra.retrieve_children=false");
+    die "Pool dataset '$pool_name' not found on $scfg->{truenas_host}\n"
+        unless ref($ds) eq 'HASH' && ($ds->{name} // '') eq $pool_name;
 
     my $free  = $ds->{available}{parsed} // 0;
     my $used  = $ds->{used}{parsed}      // 0;
