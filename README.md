@@ -669,6 +669,19 @@ Other symptoms:
 - If you can't upgrade yet, `systemctl restart pvedaemon` clears the stale connections, but only until they go idle again.
 - A VM left in `lock: create` with no disks can be removed with `qm unlock <vmid> && qm destroy <vmid>`.
 
+### High `middlewared` CPU on TrueNAS, or disk creation timing out, on large pools (4.0.3 and earlier)
+
+**Symptom:** TrueNAS `middlewared` stays at several hundred percent CPU while Proxmox is running. It drops when `pvestatd` is stopped. VM disk creation, or other plugin calls, time out. This shows up first on pools with hundreds of datasets and on clusters with many PVE nodes.
+
+**Cause:** `pvestatd` calls the plugin's `status()` every ~10 s, on every node, for every TrueNAS storage. Up to 4.0.3, each call made TrueNAS build the full dataset tree under the pool, so the load grows with *nodes × storages × datasets*. **Fixed in v4.0.4** ([#310](https://github.com/TheGrandWazoo/freenas-proxmox/issues/310)): `status()` now fetches only the pool root, without its children, on both REST and WebSocket. The usage numbers PVE shows do not change.
+
+**On 4.0.3 and earlier:**
+- Upgrade.
+- To confirm the cause, run `systemctl stop pvestatd` on all nodes briefly and watch `middlewared` CPU on TrueNAS. Then run `systemctl start pvestatd` again.
+- `journalctl -u pvestatd | grep "status update time"` shows cycles that took longer than 5 s.
+
+If load is still high on 4.0.4, please add your numbers (`middlewared` CPU, dataset count, node count, TrueNAS version) to [#311](https://github.com/TheGrandWazoo/freenas-proxmox/issues/311).
+
 ### Filing a Bug Report
 
 Please use the [GitHub issue tracker](https://github.com/TheGrandWazoo/truenas-proxmox/issues) and include the [bug report template](.github/ISSUE_TEMPLATE/bug_report.md). Include relevant log lines from `syslog` (search for `FreeNAS::`).
