@@ -27,6 +27,11 @@ See each [GitHub Release](https://github.com/TheGrandWazoo/truenas-proxmox/relea
   - Measured on the pool root response (small lab pools): SCALE 25.04 WS
     10.6 KB → 3.4 KB, 25.10 WS 14.2 KB → 3.5 KB. The saving grows with the
     number of datasets.
+- **`activate_storage` logged "online" on every `pvestatd` cycle** (#312).
+  That came to about 360 lines per storage per hour on every node (1,440/h
+  on a node with 4 TrueNAS storages), which buried the plugin's real
+  messages. The line is now logged once per process per storage, and again
+  after `deactivate_storage`.
 
 ---
 
