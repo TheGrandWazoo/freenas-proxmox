@@ -1188,7 +1188,10 @@ sub activate_storage {
     _resolve_token($storeid, $scfg);
     # Verify API reachability and warm up the global config cache
     _api_global($scfg);
-    _log('info', "activate_storage: $storeid online");
+    # pvestatd activates every storage on every ~10 s cycle: log only the
+    # first activation per process, and again after deactivate_storage (#312).
+    _log('info', "activate_storage: $storeid online")
+        unless $state->{ $scfg->{truenas_host} }{online}{$storeid}++;
     return 1;
 }
 
