@@ -8,7 +8,10 @@ See each [GitHub Release](https://github.com/TheGrandWazoo/truenas-proxmox/relea
 
 ---
 
-## [Unreleased] — 4.0.4
+## [4.0.4] — 2026-11-27
+
+Lighter `status()` polling and quieter logs. No config changes. Milestone:
+*v4.0.4 — status() polling efficiency*.
 
 ### Fixed
 - **`status()` made TrueNAS build the whole dataset tree on every poll**
@@ -32,6 +35,14 @@ See each [GitHub Release](https://github.com/TheGrandWazoo/truenas-proxmox/relea
   on a node with 4 TrueNAS storages), which buried the plugin's real
   messages. The line is now logged once per process per storage, and again
   after `deactivate_storage`.
+
+### Verified
+- Dev builds of both fixes on pve01 (PVE 9.2.21): the full VM cycle
+  (create, offline and online resize, start, destroy) passed on all four lab
+  storages: SCALE 25.04 (WebSocket, single-path and multipath), SCALE 25.10
+  (WebSocket) and CORE 13.0-U6.8 (REST). `pvesm status` numbers were
+  unchanged. With the #312 build, each storage logged "online" once, then
+  nothing for 5 minutes.
 
 ---
 
