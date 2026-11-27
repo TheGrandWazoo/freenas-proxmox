@@ -1,3 +1,14 @@
+truenas-proxmox (4.0.4-1) trixie; urgency=medium
+
+  * status() queries only the pool root (extra.retrieve_children=false),
+    and the WebSocket mapping now passes query options through. Stops
+    pvestatd polling from building the whole dataset tree in middlewared
+    on large pools / many nodes (#310)
+  * activate_storage logs "online" once per process per storage instead
+    of on every pvestatd cycle (#312)
+
+ -- KSA Technologies, LLC <theprofessor@ksatechnologies.com>  Fri, 27 Nov 2026 00:00:00 +0000
+
 truenas-proxmox (4.0.3-1) trixie; urgency=medium
 
   * Don't reuse a WebSocket that TrueNAS closed while idle: check the

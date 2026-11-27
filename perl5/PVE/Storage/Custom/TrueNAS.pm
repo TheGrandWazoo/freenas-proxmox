@@ -58,7 +58,7 @@ use PVE::Storage::Plugin;
 
 use base qw(PVE::Storage::Plugin);
 
-our $VERSION = '4.0.3';
+our $VERSION = '4.0.4';
 
 # Per-host runtime state cache
 my $state = {};

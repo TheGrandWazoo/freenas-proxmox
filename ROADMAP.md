@@ -260,6 +260,31 @@ TrueNAS closes idle WebSockets after 30–60 s, and long-lived PVE daemons reuse
 
 ---
 
+## Released — v4.0.4 (status() polling efficiency)
+
+**Released:** 2026-11-27  
+**Branch:** `main`  
+**GitHub Release:** https://github.com/TheGrandWazoo/freenas-proxmox/releases/tag/v4.0.4
+
+`pvestatd` calls `status()` every ~10 s on every node for every storage, and each call made TrueNAS build the whole dataset tree under the pool. On a ~600-dataset pool with 8 nodes that kept `middlewared` at 300–400 % CPU and timed out `alloc_image` (reported in #309 by @esaudet). Phase 2, an optional per-node `status()` cache, is tracked in #311 (v4.1.0) and depends on field results from this release.
+
+### Confirmed tested
+
+| Component | Versions |
+|-----------|---------|
+| Proxmox VE | 9.2.21 |
+| TrueNAS SCALE | 25.04.2.6, 25.10.6 (WebSocket transport) |
+| TrueNAS CORE | 13.0-U6.8 (REST transport) |
+
+### What shipped
+
+| # | Title | Commit |
+|---|-------|--------|
+| [#310](https://github.com/TheGrandWazoo/freenas-proxmox/issues/310) | `status()` queries only the pool root (`extra.retrieve_children=false`); WebSocket mapping passes query options through | bd8afc3 |
+| [#312](https://github.com/TheGrandWazoo/freenas-proxmox/issues/312) | `activate_storage` logs "online" once per process per storage | 3b09d89 |
+
+---
+
 ## Process Rules
 
 - Every business decision (defer, hold, change scope) is recorded here **and** as a comment on the relevant GitHub issue — not only in conversation or AI memory.
