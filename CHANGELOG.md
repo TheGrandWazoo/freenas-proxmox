@@ -8,6 +8,28 @@ See each [GitHub Release](https://github.com/TheGrandWazoo/truenas-proxmox/relea
 
 ---
 
+## [Unreleased] — 4.0.4
+
+### Fixed
+- **`status()` made TrueNAS build the whole dataset tree on every poll**
+  (#310, reported in #309 by @esaudet). `pvestatd` calls `status()` every
+  ~10 s on every node for every storage. Each call queried the pool root
+  with all its children, which kept `middlewared` at 300–400 % CPU on a
+  ~600-dataset pool with 8 nodes and timed out `alloc_image`. `status()` now
+  queries `/pool/dataset/id/<pool>` with `extra.retrieve_children=false`.
+  It still reports the pool root, so PVE shows the same numbers.
+  - The WebSocket transport (SCALE 25.04+) dropped query options, so the
+    option is now mapped onto the JSON-RPC query options. Without that, the
+    fix would only have helped REST.
+  - CORE 13 ignores the option (no change there). An `?id=` filter combined
+    with the option makes CORE return `[]`, so the `/id/` form is the only
+    one that is safe on every supported version.
+  - Measured on the pool root response (small lab pools): SCALE 25.04 WS
+    10.6 KB → 3.4 KB, 25.10 WS 14.2 KB → 3.5 KB. The saving grows with the
+    number of datasets.
+
+---
+
 ## [4.0.3] — 2026-10-14
 
 WebSocket reliability. No config changes. Milestone: *v4.0.3 — WebSocket reliability*.
